@@ -1,0 +1,13 @@
+# Direct dependencies, pinned so a fresh clone reproduces the same results.
+# Python 3.11+ (developed on 3.12).
+pandas==3.0.6
+numpy==2.5.4
+pyarrow==26.0.0
+plotly==7.1.0
+streamlit==1.66.0
+python-dotenv==1.2.4
+requests==2.34.2
+yfinance==1.7.0  # fallback data source and cross-checks only
+
+# Testing
+pytest==9.1.1
