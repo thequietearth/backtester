@@ -1,12 +1,12 @@
 # Backtester: build plan
 
 ## Goal
-v1 is a Streamlit app, run locally with its code public, that honestly answers: "What if I had bought last year's best S&P 500 stock every January since 1996?"
+v1 is a Streamlit app, run locally with its code public, that honestly answers: "What if I had bought last year's best S&P 500 stock every January since 1999?"
 
 It uses point-in-time index membership and compares that strategy with SPY and with a top-10 version.
 
 ## Key definitions
-- **Backtest years:** 1996 to 2025, full calendar years. The start year may move later after the M1 coverage report.
+- **Backtest years:** 1999 to 2025, full calendar years. The start moved from 1996 after the M1 coverage report (see Decisions). The coverage report still shows 1996–98, to document the gap.
 - **Formation date:** the last trading day of the previous year. The universe is the S&P 500 members on that date.
 - **Formation period:** the 12 months ending on the formation date. Stocks are ranked on their total return over this period.
 - **Entry:** the close of the first trading day of the year.
@@ -22,7 +22,7 @@ It uses point-in-time index membership and compares that strategy with SPY and w
 
 **Done when:** `streamlit run app.py` opens a page and `pytest` passes.
 
-### M1: Data and coverage report (decision gate)
+### M1: Data and coverage report (decision gate) ✅ (done 2026-10-20)
 - **Point-in-time membership.** Evaluate these sources, recommend one and document its limits:
   - a. Robot Wealth's free historical constituents dataset, described in their article "How To Get Historical S&P 500 Constituents Data For Free" (goes back to 1990)
   - b. Rebuilding the history from Wikipedia's "List of S&P 500 companies" page, using its current list plus changes table, or its old page revisions. Prior art: github.com/bkestelman/sp500_historical_components
@@ -66,8 +66,9 @@ It uses point-in-time index membership and compares that strategy with SPY and w
 - Last year's #1 performer (top 1)
 - Last year's top N, equal weight (N defaults to 10)
 - Universe mode: point-in-time (default) or today's list, labelled "naive, shows survivorship bias"
+- **Verify top-10 picks for 1999–2012** against independent facts: published annual winners, Yahoo for stocks that still trade, company histories. Fix or exclude in `data/ticker_map.csv`. M1 already checked every top-1 pick for 1999–2025, plus the top 3 for 1999–2012. EODHD's older data has broken series that the automatic checks may still miss (see `docs/data-source-evaluation.md`, pass test 4).
 
-**Done when:** each strategy runs over the full backtest period, and a manual spot check of 3 years shows sensible picks.
+**Done when:** each strategy runs over the full backtest period, a manual spot check of 3 years shows sensible picks, and every top-10 pick for 1999–2012 has been checked.
 
 ### M4: GUI v1 and publish (v1 shipped)
 - **Sidebar:** strategies (multi-select), N, start and end year, cost in bps, universe mode
@@ -99,11 +100,14 @@ It uses point-in-time index membership and compares that strategy with SPY and w
 ## Decisions
 | Decision | Default | Status |
 |---|---|---|
-| Start year | 1996 | Raymond wants the full 1996–2025 period. Revisit only if no affordable source covers it |
-| Coverage threshold for a "trusted" year | 95% | Revisit after M1 |
+| Start year | 1999 | Decided after the M1 coverage report. EODHD's histories for delisted companies mostly start at the end of 1997, so 1996–98 coverage is only 45–49%. 1999–2004 run with a "lower coverage" label |
+| Coverage threshold for a "trusted" year | 95% | Decided: ≥ 95% trusted; 85–95% labelled "lower coverage" with the missing list shown; top-1 picks in those years checked by hand against published year-end winners. The numbers may be adjusted after the M1 report |
+| Membership source | fja05680/sp500 (MIT) | Decided, see `docs/data-source-evaluation.md` |
+| Share classes in top-N (e.g. GOOG and GOOGL) | Not decided | Open, decide in M3 |
 | Price history start | 1994-01-01 (the 1996 ranking needs the close of 30 Dec 1994) | Decided |
 | Data ends during the holding year | Counts as covered, flagged in the coverage report | Decided |
-| Price data source | EODHD Historian ($19.99/month) | Under test, see `docs/data-source-evaluation.md`. Fallback: Yahoo, 2011–2025 only. Escalation: Norgate |
+| Price data source | EODHD Historian ($19.99/month) | Decided: adopted after M1. It passes the traps and dividend tests; coverage is trusted from 2010 and lower for 1999–2009. See `docs/data-source-evaluation.md` |
+| Price sanity | A member whose formation year shows a one-day doubling or halving, a hole of 10+ trading days, an adjustment glitch or an unexplained adjusted-vs-traded gap, or which trades too little to be a member, is not ranked and counts as a gap. Holding-year jumps are flagged, never removed | Decided (M1) |
 | Data budget | Up to about $30/month | Decided |
 | Paid month | One month of EODHD Historian ($19.99). Subscribe only once the download scripts are ready; cancel before renewal | Decided |
 | Download scope | Day 1: v1 needs (every S&P 500 member since 1996 in all code variants, plus SPY and RSP). Then all US common stocks and ETFs, active and delisted. Prices, dividends and splits throughout | Decided |

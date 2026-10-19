@@ -1,6 +1,6 @@
 # Data source evaluation
 
-**Status (2026-10-17):** EODHD's Historian plan is under test. It passed the free symbol-list check; the paid month comes next. If it fails, the fallback is Yahoo for 2011–2025 only. Membership comes from a separate source; see "Membership source" below.
+**Status (2026-10-20): EODHD adopted.** The Historian plan is subscribed. It passes the traps and dividend tests, and price-sanity checks keep its broken series out of the ranking. Coverage is trusted from 2010, lower coverage for 1999–2009, and unreliable for 1996–98, which is why the backtest starts in 1999. If it fails, the fallback is Yahoo for 2011–2025 only. Membership comes from a separate source; see "Membership source" below.
 
 ## What the data has to do
 
@@ -145,11 +145,62 @@ EODHD lists 50,964 active and 60,433 delisted US symbols (33,186 of the delisted
 
 1996–1999 will probably stay below 95% even after mapping, because companies that disappeared before 2000 are missing.
 
-**Next: one paid month of Historian ($19.99).**
-1. For every member ticker, download every matching EODHD code, including the `1`, `_old` and `_old1` variants. That's a few thousand calls, well under the 100,000 daily limit. Cache them all locally.
-2. Map each member to the code whose price history covers its membership dates, and review the mapping by company name.
-3. Run pass tests 1–3: real coverage per year, the traps, and dividends included.
-4. Decide: adopt EODHD, accept and label lower coverage for 1996–99, move the start year, or escalate to Norgate.
+**Paid month, v1 results (2026-10-19).** Subscribed to Historian.
+- **Download:** `scripts/download_eodhd.py --scope v1` made 4,524 calls with 0 errors. That's prices, dividends and splits for 1,508 codes: every candidate for every member, plus SPY and RSP.
+- **Mapping:** `scripts/build_price_cache.py` mapped the 1,262 membership spells as 854 automatic, 322 flagged for review and 86 missing. Of the missing spells, 52 ended before 1999 and 34 overlap 1999 or later.
+
+**EODHD truncates old histories.** Of the delisted codes downloaded, 362 have prices starting exactly on 1997-12-31, another 36 on 1999-01-04 and 27 on 2003-09-10. Companies that still trade go back to 1994. For example, `WEN_old` (Wendy's International) starts at 1997-12-31. So for 1996–1998, many members can't be ranked, because ranking them needs prices from before 1998.
+
+**Pass test 1, coverage** (`bt/coverage.py`). Final figures, after hand mapping and the price checks in pass test 4:
+
+| Years | Coverage | Band |
+|---|---|---|
+| 1996–1998 | 42.9–48.0% | unreliable (before the 1999 start, shown to document why) |
+| 1999–2009 | 86.4–94.6% | lower coverage |
+| 2010–2025 | 96.6–99.8% | trusted |
+
+Before hand mapping and price checks, 2005–2009 measured about 96%. The stricter checks set aside 13–18 suspect members a year there, which moved those years just under 95%.
+
+Why members are missing in 1996–98: 623 member-years without formation data (the 1997 truncation) and 158 with no EODHD security at all (companies gone before 1999, such as Amoco, Sonat and NYNEX).
+
+**Pass test 2, traps:** all six pass.
+- `WEN` 1997 → `WEN_old`, flagged partial (the truncated history).
+- `EP` 2003 and 2009 → `EP_old`.
+- `FDO` 2008 → `FDO`.
+- `AN` 1997 → flagged for review, because the ticker left the index and came back.
+- `SNT` 1996 → flagged "small", since it's Senstar.
+
+One mapping rule changed after the first run. A candidate whose prices stop when membership ended is now preferred even with a truncated history; before, today's `WEN` won on full coverage.
+
+**Pass test 4, price sanity** (added during M1). Reviewing each year's top-ranked stocks exposed broken EODHD series, mostly for delisted companies before 2013. Examples:
+- **Two securities mixed in one series:** Cooper Industries' price alternates between about $12 (volume 16) and $35 (volume 983,000) from day to day.
+- **A corrupt adjustment factor:** Ambac's adjusted price is about $0.0001 against a traded price of about $59.
+- **Splits applied twice:** Time Warner, Safeway and Gateway, whose adjusted price doubles on the split date while the traded price doesn't move.
+- **Raw prices off by 9× to 444×:** R. R. Donnelley.
+- **Garbage prints:** Univision, Goodrich and Countrywide, with swings of +58%, −24% and +38% on consecutive days.
+- **The wrong security behind the ticker, with no `_old` code:** `BBBY` holds Overstock's history, and `PBG` and `SLR` hold thinly traded instruments.
+
+Left alone, these produce "winners" like +17,292% (Cooper, 2006) and +49,349% (Donnelley, 2001), and the top-1 strategy picks exactly those. The coverage report (`bt/coverage.py`) now applies these checks to each member's formation year:
+1. **Jump:** the adjusted price doubles or halves in a day → "suspect prices". The same rule fires once in 32 years across Yahoo's 20 long-lived stocks.
+2. **Hole:** more than 10 trading days without a price → "suspect prices". This caught L Brands, whose "+84% day" was a jump across a missing month.
+3. **Adjustment glitch:** the adjusted price moves more than 25% in a day while the traded price moves less than 10% → "suspect prices". This catches double-counted splits (Safeway, Gateway) and corrupt factors (Ambac). It compares against the true traded price, because EODHD's traded price is sometimes already split-adjusted.
+4. **Unexplained gap:** over the year, the adjusted return and the traded return (on the same split basis) differ by more than 30% → "suspect prices". Dividends rarely explain more than about 10%. This caught Williams 2003 and Deluxe 2001, probably mishandled spin-offs.
+5. **Small:** trading value under $0.5m a day, and not confirmed by hand → "suspect identity". Below that line nearly every case was broken data or another company.
+
+**Calibration:** genuine winners that split during their big year stay "ok": Qualcomm 1999, Dell 1998, Nvidia 2001, Tesla 2020, Apple 2004 and XL 2009.
+
+Suspect members aren't ranked, and they show up in the coverage gaps instead. Jumps during a holding year are only flagged, because real crashes (Lehman −94% in a day) must stay in the results. In 1999–2025 there are 214 suspect member-years.
+
+**Hand fixes from this review** (`data/ticker_map.csv`):
+- `BBBY` → `BBBYQ`, the real Bed Bath & Beyond. EODHD's `BBBY` and `BBBY_old` are both Overstock's history.
+- `PBG` is excluded from December 2003, because EODHD's series becomes a different instrument in September 2004.
+- Ambac is excluded, because of its corrupt factor.
+
+**Top pick per year after all checks** (pass test for top-1): every one is a genuine annual winner. Dell, Qualcomm, Reebok, Nvidia, Providian, Avaya, Autodesk, Valero, Allegheny Technologies, NOV, Family Dollar, XL, Netflix, Cabot Oil & Gas, PulteGroup, Netflix, Southwest, Netflix, Nvidia, NRG, AMD, AMD, Tesla, Devon, Occidental, Nvidia and Palantir, for 1999–2025 in order.
+
+**Not done yet:** each top-10 pick for 1999–2012 still needs checking. That's an M3 task (see PLAN.md).
+
+**Pass test 3, dividends:** passes (`scripts/validate_prices.py`). For 20 stocks that still trade, each year's adjusted return beats the raw-price return by about the dividend yield (KO +3.1% a year, XOM +3.0%, SPY +2.0%). Against Yahoo's total-return prices, the median yearly difference is 0.0. Only 4 of 611 full years differ by more than 0.5 points: PFE 1995, JPM 1995 and 1996, and KO 2001 (by 0.6).
 
 ### Norgate Data (Platinum): strongest on paper, over budget
 
@@ -172,14 +223,29 @@ EODHD lists 50,964 active and 60,433 delisted US symbols (33,186 of the delisted
 
 ## Membership source
 
-fja05680/sp500 was used for the probe. It has one row per change date from 1996-01-02, with tickers as used at the time per its README.
+**Chosen: fja05680/sp500 (MIT licence).** It was compared on 2026-10-19 with a fresh Wikipedia rebuild at every year-end from 1995 to 2025. Script: `scripts/compare_membership_sources.py`.
 
-**Known issues:**
+| | fja05680 | Wikipedia rebuild |
+|---|---|---|
+| Method | One snapshot per change date from 1996-01-02. Early years come from Andreas Clenow's *Trading Evolved* dataset; recent years from Wikipedia plus searches | Today's list, walked backwards through the change table (also Robot Wealth's method) |
+| Early history | Full snapshots | The change table lists only 7 changes for 1995–99 and 8 for 2000–04, while the index really changes 20–30 times a year |
+| Year-end 1995 | 487 members | Shares only 222 tickers with fja05680. Most of the rebuild is today's members, i.e. survivorship bias |
+| Agreement | | Within about 5% only from 2019 onwards |
+| Known events | All correct | Wrong for Amoco, Sonat, Wendy's and Enron |
+| Tickers | As used at the time, except that bankrupt companies appear under their bankruptcy tickers (`ENRNQ`, `LEHMQ`, `AAMRQ`) and a few 1996 entries use later tickers (`ARNC`, `BHGE`) | Today's tickers, because renames such as FB → META aren't recorded |
+| Company names | None | Yes, for the changes it lists |
+| Licence | MIT, so the derived file can be committed with its notice | CC BY-SA |
+
+The known events checked were Amoco, Sonat, Wendy's International, El Paso, Family Dollar, Enron, Lehman and Tesla.
+
+**Robot Wealth:** its published data is an R file last updated in May 2020, built with the same Wikipedia method, so a fresh rebuild supersedes it. In 2026 Wikipedia moved the change table from "List of S&P 500 companies" to "Historical components of the S&P 500", which breaks older scrapers, including Robot Wealth's.
+
+**fja05680 known issues:**
 - It lists only 487 members on 1996-01-02, and its README says the first five years may miss some symbols.
 - `AAL` and `AAMRQ` both appear in 1996, probably the same airline (AMR) counted twice.
-- Some later tickers are used for 1996, e.g. `ARNC` and `BHGE`.
+- Its first snapshot is 1996-01-02, which stands in for the end-1995 formation date.
 
-Robot Wealth and Wikipedia are still to be compared in M1.
+**Wikipedia's role:** a cross-check for recent years, and company names to help review the ticker mapping.
 
 ## References
 

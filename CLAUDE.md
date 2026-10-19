@@ -66,6 +66,7 @@ v1 only rebalances once a year, but build the engine to accept any rebalance dat
 7. **Costs.** Charge transaction costs in basis points per side on every weight change. Make the rate configurable, default 10 bps.
 8. **Benchmark.** Always show results next to SPY over exactly the same dates.
 9. **A ticker is not a company.** The same ticker can belong to different companies at different times (`AN` was Amoco until 1998 and is AutoNation today). Match membership to prices by ticker and date. Flag any member whose price history looks like a different company, for example a name mismatch, or data that starts after the stock joined the index.
+10. **Distrust extreme data.** The price source has broken series (mixed securities, splits applied twice, corrupt adjustments), and ranking strategies pick exactly those. Members failing the price-sanity checks in `bt/coverage.py` are not ranked; they count as gaps in the coverage report, never silently. Never "fix" a price by hand: map the right code in `data/ticker_map.csv` or exclude the dates. Holding-period jumps are flagged but kept, because real crashes must stay in the results.
 
 ## Scope rules
 - Build milestones in PLAN.md order. Don't start the next milestone until the current one meets its done-criteria.

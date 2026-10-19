@@ -8,6 +8,7 @@ streamlit==1.66.0
 python-dotenv==1.2.4
 requests==2.34.2
 yfinance==1.7.0  # fallback data source and cross-checks only
+lxml==6.1.3  # parses Wikipedia tables for the membership cross-check
 
 # Testing
 pytest==9.1.1

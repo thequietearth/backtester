@@ -1,0 +1,52 @@
+# Hand fixes for the ticker -> EODHD code mapping. They always win over the automatic choice.
+# One row per (ticker, date range) as listed in data/constituents.parquet. An empty end means
+# "to now". An empty code means "no usable prices" (the member then counts as missing).
+# Ranges that cover part of a spell split it (see bt.data.apply_overrides).
+ticker,start,end,code,note
+# Bankruptcy tickers and renames: the company's prices are under another code
+AAMRQ,1996-01-02,2003-03-14,,AMR Corp (American Airlines): EODHD's AMR_old only starts in 2003-09
+ABKFQ,2000-12-11,2008-06-11,,Ambac Financial Group: EODHD's ABK has a corrupt adjustment factor (adjusted ~$0.0001 vs traded ~$59) and no volume
+AFS.A,1998-04-08,2000-12-01,,Associates First Capital: EODHD's ASFZ only starts in 2001-07
+ANRZQ,2011-06-02,2012-10-02,ANR,Alpha Natural Resources
+ATGE,2009-06-09,2012-10-01,DV_old,DeVry (renamed Adtalem in 2017); EODHD's DV_old only starts in 2011-03
+BHMSQ,1996-01-02,2000-12-11,BS,Bethlehem Steel
+CIT.A,2000-07-17,2001-06-04,,CIT Group class A: EODHD's CIT is the later CIT Group (from 2009)
+HRS,1996-01-02,1999-11-08,LHX,Harris Corp; its history continues as L3Harris
+HRS,2008-09-22,2019-06-01,HRS,Harris Corp (checked)
+HSH,1996-01-02,2012-06-29,,Sara Lee (renamed Hillshire Brands in 2012): EODHD's SLE_old has no prices
+IR,1996-01-02,2009-07-01,TT,Ingersoll-Rand; its history continues as Trane Technologies
+IR,2010-11-17,2020-03-03,TT,Ingersoll-Rand plc (renamed Trane Technologies in 2020); IR after that is a different company
+LEHMQ,1998-01-12,2008-09-17,LEH,Lehman Brothers
+MTL,1998-02-23,1999-09-20,,Mercantile Bancorporation: not in EODHD (MBCRQ is a different bank)
+MTLQQ,1996-01-02,2009-06-03,GM_old,General Motors Corp (old GM; Motors Liquidation after 2009)
+PEAK,2019-11-05,2024-03-04,DOC,Healthpeak (ticker changed from PEAK to DOC in 2024)
+RE,2017-06-19,2023-07-10,EG,Everest Re (renamed Everest Group)
+RSHCQ,1996-01-02,2011-07-01,RSH,Tandy / RadioShack
+SUNEQ,2007-05-31,2011-12-19,WFR_old,MEMC Electronic Materials (later SunEdison) (checked)
+TMC,1996-01-02,2000-06-13,TMC-A,Times Mirror
+UAWGQ,1996-01-02,2002-05-15,,US Airways Group: EODHD's LCC is the post-2005 merged company
+UMG,1996-01-02,2000-06-15,USW,MediaOne Group
+WCOEQ,1996-04-01,2002-05-15,MCWEQ,WorldCom; EODHD's MCWEQ only starts in 2001-06
+WYND,2006-08-01,2018-05-31,TNL,Wyndham Worldwide (now Travel + Leisure) (checked)
+# Reused tickers: the code with this ticker today belongs to a different company
+AN,1996-01-02,1999-01-04,,Amoco: not in EODHD. AN today is AutoNation
+BBBY,1999-10-01,2017-07-26,BBBYQ,Bed Bath & Beyond (checked: $43 end-2003; ~2-3m shares/day). EODHD's BBBY and BBBY_old are both Overstock's history
+AN,2003-02-24,2017-08-08,AN,AutoNation (checked)
+MIR,1997-08-07,2000-06-01,MIR1,Mirage Resorts (checked: prices end 2000-05-31)
+MIR,2001-04-03,2003-07-17,,Mirant: EODHD's MIR_old only starts in 2006
+SNT,1996-01-02,1999-10-26,,Sonat: not in EODHD. SNT today is Senstar Technologies
+TT,2002-05-13,2008-06-06,,American Standard / Trane Inc: not in EODHD. TT today is Ingersoll-Rand's history
+# Not in EODHD, or EODHD's prices start too late
+AZA.A,1996-01-02,2001-06-25,,Alza: not in EODHD
+COMS,1996-01-02,2000-07-28,,3Com: not in EODHD
+GP,1996-01-02,2005-12-20,,Georgia-Pacific: not in EODHD
+LDW.B,1996-01-02,1999-12-08,,Laidlaw Inc: not in EODHD (LI_old is the post-2003 successor)
+LU,1996-10-01,2006-12-01,,Lucent Technologies: not in EODHD (only the merged Alcatel-Lucent)
+MDR,1996-01-02,2003-08-20,,McDermott: EODHD's MDR only starts in 2003-09
+MI,2002-02-11,2011-07-06,,Marshall & Ilsley: not in EODHD
+NLV,1996-04-01,2000-01-06,,Company not identified; no EODHD match
+NSI,1996-01-02,2001-12-03,,National Service Industries: not in EODHD
+RDS.A,1996-01-02,2002-07-22,,Royal Dutch Petroleum: not in EODHD
+TEN,1996-01-02,1999-11-05,,Tenneco before its 1999 split: EODHD's TEN_old only starts in 2002
+# Broken price data: the code is right but its prices aren't usable for these dates
+PBG,2003-12-01,2010-03-01,,Pepsi Bottling Group: from 2004-09 EODHD's PBG becomes a different instrument (volume ~2k/day vs ~700k; price $55 -> $359)
