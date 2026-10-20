@@ -61,7 +61,7 @@ It uses point-in-time index membership and compares that strategy with SPY and w
 
 **Done when:** the tests pass and the RSP comparison is written up in `docs/sanity-check.md`.
 
-### M3: v1 strategies
+### M3: v1 strategies ✅ (done 2026-10-20)
 - SPY buy and hold (the benchmark)
 - Last year's #1 performer (top 1)
 - Last year's top N, equal weight (N defaults to 10)
@@ -103,7 +103,11 @@ It uses point-in-time index membership and compares that strategy with SPY and w
 | Start year | 1999 | Decided after the M1 coverage report. EODHD's histories for delisted companies mostly start at the end of 1997, so 1996–98 coverage is only 45–49%. 1999–2004 run with a "lower coverage" label |
 | Coverage threshold for a "trusted" year | 95% | Decided: ≥ 95% trusted; 85–95% labelled "lower coverage" with the missing list shown; top-1 picks in those years checked by hand against published year-end winners. The numbers may be adjusted after the M1 report |
 | Membership source | fja05680/sp500 (MIT) | Decided, see `docs/data-source-evaluation.md` |
-| Share classes in top-N (e.g. GOOG and GOOGL) | Not decided | Open, decide in M3 |
+| Share classes in top-N (e.g. GOOG and GOOGL) | Allowed: each class is its own index member | Decided (M3). It never happened among the 270 checked picks |
+| Ranking universe | Members on the formation date whose formation-year prices pass the checks. **No** price-at-entry requirement: entry is the day after the decision, so requiring it would use tomorrow's information. A pick that can't be bought stays as cash and is logged | Decided (M3) |
+| What "a year" means in results | A holding year: from one January purchase to the next. The same dates apply to SPY | Decided (M3) |
+| Known-bad prices | Listed by code and date range in `data/price_exclusions.csv` (blanked, never edited); remappings stay in `data/ticker_map.csv` | Decided (M3) |
+| Top-10 pick review | All 270 picks for 1999–2025 checked: 192 against Yahoo, 78 by hand. See `docs/top10-review.md` | Done (M3) |
 | Price history start | 1994-01-01 (the 1996 ranking needs the close of 30 Dec 1994) | Decided |
 | Data ends during the holding year | Counts as covered, flagged in the coverage report | Decided |
 | Price data source | EODHD Historian ($19.99/month) | Decided: adopted after M1. It passes the traps and dividend tests; coverage is trusted from 2010 and lower for 1999–2009. See `docs/data-source-evaluation.md` |

@@ -11,9 +11,12 @@ index. Rules (CLAUDE.md):
   exactly its target share of the post-cost equity E', which solves
       E' = E - c * sum(|w_i * E' - V_i|)        (c = cost_bps / 10,000)
   so costs are exact and cash never goes negative.
-- Data ends while held: the position is sold at its last available price (paying the
-  cost), the money goes to cash, and the trade is flagged "data ended, real outcome
-  unknown". A short gap in prices is not an ending: the position is held at its last value.
+- Data ends while held: a position without a price is held at its last value, because a
+  gap may be temporary. After more than MAX_GAP_DAYS trading days in a row without a price
+  it is sold at that last price (paying the cost), the money goes to cash, and the trade is
+  flagged "data ended, real outcome unknown". This uses only what is known each day - it
+  never peeks at whether prices come back - and it stops a series that restarts as a
+  different instrument (EODHD's Coastal after its 2001 takeover) from being followed.
 - No price on a trade date: a new purchase is skipped (that weight stays cash); a held
   position is kept as it is. Both are logged.
 - No leverage or short selling: weights must be >= 0 and sum to at most 1.
@@ -26,6 +29,7 @@ import pandas as pd
 
 DATA_ENDED = "data ended, real outcome unknown"
 NO_PRICE = "no price on the trade date"
+MAX_GAP_DAYS = 10  # same limit as the coverage report's "hole" check
 
 
 @dataclass
@@ -81,26 +85,30 @@ def run_backtest(weights: pd.DataFrame, prices: pd.DataFrame, cost_bps: float = 
                            pd.DataFrame(columns=["date", "code", "action", "value", "price", "cost", "note"]))
     if not plan:
         return empty
-    last_valid = {k: px[k].last_valid_index() for k in px.columns}
 
     positions: dict[str, float] = {}  # code -> value
     marks: dict[str, float] = {}      # code -> price the value was last marked at
+    marked_on: dict[str, pd.Timestamp] = {}  # code -> date of that price
+    missing: dict[str, int] = {}      # code -> trading days in a row without a price
     cash = initial
     dates, equity, holdings, trades = [], [], [], []
     for t in cal[cal >= min(plan)]:
-        # 1. Mark to market, and exit positions whose data has ended.
+        # 1. Mark to market; after a long run without prices, treat the data as ended.
         for k in list(positions):
             p = px.at[t, k]
             if pd.notna(p):
                 positions[k] *= p / marks[k]
-                marks[k] = p
-            elif last_valid[k] is None or last_valid[k] < t:
+                marks[k], marked_on[k], missing[k] = p, t, 0
+                continue
+            missing[k] = missing.get(k, 0) + 1
+            if missing[k] > MAX_GAP_DAYS:
                 value = positions.pop(k)
                 cost = c * value
                 cash += value - cost
-                trades.append({"date": t, "code": k, "action": "exit", "value": value,
-                               "price": marks.pop(k), "cost": cost, "note": DATA_ENDED})
-            # else: a temporary gap - keep the last value
+                trades.append({"date": t, "code": k, "action": "exit", "value": value, "price": marks.pop(k),
+                               "cost": cost, "note": f"{DATA_ENDED} (last price {marked_on.pop(k).date()})"})
+                missing.pop(k)
+            # else: maybe a temporary gap - hold at the last value
 
         # 2. Rebalance on trade dates.
         if t in plan:
@@ -129,9 +137,11 @@ def run_backtest(weights: pd.DataFrame, prices: pd.DataFrame, cost_bps: float = 
                                    "value": abs(delta), "price": px.at[t, k], "cost": c * abs(delta), "note": ""})
             positions = {**kept, **new}
             for k in new:
-                marks[k] = px.at[t, k]
+                marks[k], marked_on[k], missing[k] = px.at[t, k], t, 0
             for k in set(marks) - set(positions):
                 marks.pop(k)
+                marked_on.pop(k, None)
+                missing.pop(k, None)
             cash = e_after - sum(positions.values())
 
         total = cash + sum(positions.values())

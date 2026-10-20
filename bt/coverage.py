@@ -85,6 +85,18 @@ def has_unexplained_adjustment(adjusted: pd.Series, raw_split_adjusted: pd.Serie
     return bool(abs(np.log(a1 / a0) - np.log(r1 / r0)) > GAP_TOLERANCE)
 
 
+# Statuses that may be ranked. "no holding data" is included on purpose: whether a stock
+# has a price at entry is only known the day after the decision, so requiring it would
+# use tomorrow's information. If a pick can't be bought, the engine keeps that money in cash.
+RANKABLE = {"ok", "no holding data"}
+
+
+def rankable_universe(detail: pd.DataFrame, formation_dates: pd.Series) -> dict:
+    """{formation date: sorted codes that may be ranked that year}, from coverage detail."""
+    return {formation_dates[y]: sorted(detail[(detail.year == y) & detail.status.isin(RANKABLE)].code)
+            for y in formation_dates.index}
+
+
 def band(coverage_pct: float) -> str:
     if coverage_pct >= TRUSTED_PCT:
         return "trusted"

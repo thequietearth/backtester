@@ -49,5 +49,9 @@ NLV,1996-04-01,2000-01-06,,Company not identified; no EODHD match
 NSI,1996-01-02,2001-12-03,,National Service Industries: not in EODHD
 RDS.A,1996-01-02,2002-07-22,,Royal Dutch Petroleum: not in EODHD
 TEN,1996-01-02,1999-11-05,,Tenneco before its 1999 split: EODHD's TEN_old only starts in 2002
+# L Brands: different codes hold usable prices in different years (checked against Yahoo's BBWI)
+LB,1996-01-02,2003-09-10,,Limited Brands before 2003-09: no clean EODHD prices (LTD starts 2003-09; LB_old2 is a different thin instrument before 2007)
+LB,2003-09-10,2013-11-29,LTD,Limited Brands (checked: yearly returns within a few points of Yahoo's BBWI for 2004-2012)
+LB,2013-11-29,2021-08-03,LB_old2,L Brands (checked: matches Yahoo's BBWI exactly from 2014)
 # Broken price data: the code is right but its prices aren't usable for these dates
 PBG,2003-12-01,2010-03-01,,Pepsi Bottling Group: from 2004-09 EODHD's PBG becomes a different instrument (volume ~2k/day vs ~700k; price $55 -> $359)

@@ -53,6 +53,25 @@ def membership_spells(constituents: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows, columns=["ticker", "start", "end"])
 
 
+NAIVE_START = pd.Timestamp("1900-01-01")
+
+
+def naive_constituents(constituents: pd.DataFrame) -> pd.DataFrame:
+    """Today's members as the only snapshot, dated before any formation date, so
+    members_on() returns today's list for every year. This is the classic mistake the
+    "naive universe" mode exists to show: it ranks only companies that survived to today
+    (and some that weren't in the index yet), which flatters results - survivorship bias."""
+    latest = constituents["date"].max()
+    return constituents[constituents["date"] == latest].assign(date=NAIVE_START).reset_index(drop=True)
+
+
+def naive_security_map(security_map: pd.DataFrame, naive: pd.DataFrame) -> pd.DataFrame:
+    """Today's mapping for today's members, stretched back to NAIVE_START, as a naive
+    backtest on today's tickers would use their full price history."""
+    current = security_map[security_map["end"].isna() & security_map["ticker"].isin(naive["ticker"])]
+    return current.assign(start=NAIVE_START).reset_index(drop=True)
+
+
 def formation_dates(calendar, years) -> pd.Series:
     """For each backtest year Y, the formation date: the last trading day of Y-1.
 

@@ -46,3 +46,10 @@ def test_changing_prices_after_t_changes_nothing_up_to_t():
         pd.testing.assert_frame_equal(w1.loc[:t], w2.loc[:t])  # same decisions up to t
         pd.testing.assert_series_equal(r1.equity.loc[:t], r2.equity.loc[:t])  # same equity up to t
         assert not r1.equity.loc[t:].equals(r2.equity.loc[t:])  # the change did matter afterwards
+
+        # Prices vanishing after t (a delisting the strategy couldn't know about) also
+        # changes nothing up to t.
+        gone = prices.copy()
+        gone.loc[after] = np.nan
+        r3 = run_backtest(momentum_strategy(gone, rebalance), gone, cost_bps=10)
+        pd.testing.assert_series_equal(r1.equity.loc[:t], r3.equity.loc[:t])

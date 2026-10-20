@@ -159,6 +159,24 @@ def candidate_codes(ticker: str, index: dict[str, list[str]]) -> list[str]:
     return sorted(index.get(ticker.replace(".", "-"), []))
 
 
+def apply_price_exclusions(eod: pd.DataFrame, ranges) -> pd.DataFrame:
+    """Blank the prices (close and adjusted close) inside known-bad date ranges, listed by
+    hand in data/price_exclusions.csv. `ranges` is [(start, end or None for "onwards")].
+
+    Used where a code is right but its prices aren't: a series that carries on as a
+    different instrument after a takeover, or a stretch of broken dividend adjustments.
+    Blanked prices count as missing: the stock can't be ranked on them, and the engine
+    sells a held position after a long run without prices. Prices are never edited.
+    """
+    out = eod.copy()
+    for start, end in ranges:
+        bad = out["date"] >= start
+        if end is not None:
+            bad &= out["date"] <= end
+        out.loc[bad, ["close", "adjusted_close"]] = float("nan")
+    return out
+
+
 def cache_file(root: str | Path, kind: str, code: str) -> Path:
     """Where one symbol's data of one kind (eod, div, splits) is cached."""
     return Path(root) / kind / f"{code.replace('/', '_')}.parquet"

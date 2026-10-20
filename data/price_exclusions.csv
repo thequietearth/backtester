@@ -1,0 +1,8 @@
+# Known-bad EODHD prices: the code is right, but its prices on these dates are not usable.
+# Prices in [start, end] are blanked (an empty end means "from start onwards"); see
+# bt.data.apply_price_exclusions. Never edit a price - exclude it and say why.
+code,start,end,note
+CGP,2001-01-30,,Coastal Corp was bought by El Paso on 2001-01-29; later prices under CGP are a different instrument (they run to 2022)
+HPC,2008-11-14,,Hercules was bought by Ashland on 2008-11-13; afterwards the price is frozen at $30.02 with no volume and later becomes another instrument
+WMB,2003-01-01,2005-12-31,"Williams: EODHD's dividend adjustments are far too large (adjusted +105% vs traded and Yahoo +66% in 2004); dividends were about $0.01 a quarter"
+JCI,2016-09-01,2016-12-31,"Johnson Controls: 2016 merger with Tyco and Adient spin-off; EODHD's adjusted return (+64%) disagrees with its traded price (+38%) and Yahoo (+42%), so 2016 can't be trusted"

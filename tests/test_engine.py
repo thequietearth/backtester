@@ -74,15 +74,31 @@ def test_unused_weight_stays_in_cash_at_zero_interest():
 
 
 def test_stock_whose_data_ends_while_held_is_sold_at_its_last_price_and_flagged():
-    prices = frame(A=[10, 10, 12, np.nan, np.nan], B=[10, 10, 10, 10, 10])
-    r = run_backtest(weights({0: {"A": 1.0}}), prices, cost_bps=10)
-    # Day 2: 1.2 * E1. Day 3: A has no more data -> sold at its last price (12),
-    # paying 10 bps; the rest is cash and stays flat.
-    assert r.equity[D[3]] == pytest.approx(1.2 * E1 * (1 - C))
-    assert r.equity[D[4]] == pytest.approx(1.2 * E1 * (1 - C))
+    days = pd.bdate_range("2024-01-01", periods=20)
+    a = [10, 10, 12] + [np.nan] * 17
+    prices = pd.DataFrame({"A": a, "B": 10.0}, index=days)
+    w = pd.DataFrame({"A": [1.0]}, index=[days[0]])
+    r = run_backtest(w, prices, cost_bps=10)
+    # Day 2: 1.2 * E1. From day 3 there is no price: held at its last value while the gap
+    # might be temporary. After more than 10 trading days without a price (day 13) it is
+    # sold at that last price (12), paying 10 bps, and the money is cash from then on.
+    # Deciding this needs only what is known on each day - no peeking at later prices.
+    assert r.equity[days[12]] == pytest.approx(1.2 * E1)
+    assert r.equity[days[13]] == pytest.approx(1.2 * E1 * (1 - C))
+    assert r.equity[days[19]] == pytest.approx(1.2 * E1 * (1 - C))
     t = r.trades.iloc[-1]
-    assert (t.date, t.code, t.action, t.price) == (D[3], "A", "exit", 12)
-    assert t.note == "data ended, real outcome unknown"
+    assert (t.date, t.code, t.action, t.price) == (days[13], "A", "exit", 12)
+    assert t.note == "data ended, real outcome unknown (last price 2024-01-03)"
+
+
+def test_prices_that_resume_after_a_long_hole_are_not_followed():
+    # Real case: EODHD's Coastal (CGP) stops at its 2001 takeover, then restarts as a
+    # different instrument. After more than 10 missing days the position is gone.
+    days = pd.bdate_range("2024-01-01", periods=20)
+    a = [10, 10, 12] + [np.nan] * 12 + [50.0] * 5
+    prices = pd.DataFrame({"A": a, "B": 10.0}, index=days)
+    r = run_backtest(pd.DataFrame({"A": [1.0]}, index=[days[0]]), prices, cost_bps=10)
+    assert r.equity[days[19]] == pytest.approx(1.2 * E1 * (1 - C))  # not 5x from the impostor
 
 
 def test_a_short_gap_in_prices_is_not_mistaken_for_data_ending():

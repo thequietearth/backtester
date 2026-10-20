@@ -4,7 +4,7 @@ import pandas as pd
 import pytest
 
 from bt.metrics import (annual_volatility, beat_rate, best_and_worst_year, cagr, drawdown_series,
-                        max_drawdown, sharpe_ratio, yearly_returns)
+                        holding_period_returns, max_drawdown, sharpe_ratio, yearly_returns)
 
 
 def curve(values, dates):
@@ -56,6 +56,14 @@ def test_yearly_returns_use_the_previous_year_end_and_a_partial_first_year():
     np.testing.assert_allclose(yr.values, [0.10, 0.10, -0.10])  # 2020 is from the start (1 Jun)
     assert list(yr.index) == [2020, 2021, 2022]
     assert best_and_worst_year(eq) == ((2020, pytest.approx(0.10)), (2022, pytest.approx(-0.10)))
+
+
+def test_holding_period_returns_run_from_one_rebalance_to_the_next():
+    # Rebalances (trades) on 2 Jan 2020 and 4 Jan 2021; the curve ends 4 Jan 2022.
+    eq = curve([100, 104, 110, 99, 132], ["2020-01-02", "2020-12-31", "2021-01-04", "2021-12-31", "2022-01-04"])
+    r = holding_period_returns(eq, pd.to_datetime(["2020-01-02", "2021-01-04", "2022-01-04"]))
+    assert list(r.index) == [2020, 2021]  # labelled by the year the holding started
+    np.testing.assert_allclose(r.values, [110 / 100 - 1, 132 / 110 - 1])
 
 
 def test_beat_rate_counts_only_years_both_have():

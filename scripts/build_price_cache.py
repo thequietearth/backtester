@@ -9,6 +9,7 @@ Outputs (gitignored, data/cache/):
   close.parquet      the traded (raw) close, same layout, for adjustment checks
   split_factors.parquet  cumulative split ratio for codes that ever split
 Hand fixes go in data/ticker_map.csv (ticker, start, end, code, note) and always win.
+Known-bad price dates go in data/price_exclusions.csv and are blanked before anything else.
 Ends with the pass test on the known traps from docs/data-source-evaluation.md.
 """
 import json
@@ -19,8 +20,8 @@ import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from bt.data import (apply_overrides, assess_candidate, cache_file, candidate_codes,  # noqa: E402
-                     choose_security, index_codes)
+from bt.data import (apply_overrides, apply_price_exclusions, assess_candidate, cache_file,  # noqa: E402
+                     candidate_codes, choose_security, index_codes)
 from bt.universe import load_constituents, membership_spells  # noqa: E402
 
 EODHD = ROOT / "data" / "raw" / "eodhd"
@@ -28,10 +29,29 @@ OUT = ROOT / "data" / "cache"
 BENCHMARKS = ["SPY", "RSP"]
 
 
+def price_exclusions() -> dict:
+    """{code: [(start, end or None)]} from data/price_exclusions.csv."""
+    path = ROOT / "data" / "price_exclusions.csv"
+    if not path.exists():
+        return {}
+    out = {}
+    for r in pd.read_csv(path, dtype=str, comment="#").itertuples():
+        end = pd.Timestamp(r.end) if isinstance(r.end, str) and r.end.strip() else None
+        out.setdefault(r.code, []).append((pd.Timestamp(r.start), end))
+    return out
+
+
+EXCLUSIONS = price_exclusions()
+
+
 def load_eod(code, memo={}):
+    """A code's cached prices, with known-bad dates blanked (data/price_exclusions.csv)."""
     if code not in memo:
         path = cache_file(EODHD, "eod", code)
-        memo[code] = pd.read_parquet(path) if path.exists() else None
+        eod = pd.read_parquet(path) if path.exists() else None
+        if eod is not None and code in EXCLUSIONS:
+            eod = apply_price_exclusions(eod, EXCLUSIONS[code])
+        memo[code] = eod
     return memo[code]
 
 

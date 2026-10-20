@@ -37,8 +37,11 @@ Price data is **not included** in this repo, because it is licensed for personal
 python scripts/download_eodhd.py --scope v1     # ~4,500 calls: every S&P 500 member since 1996, plus SPY and RSP
 python scripts/build_price_cache.py             # maps members to price series and runs the trap test
 python scripts/validate_prices.py               # checks that adjusted prices include dividends
+python scripts/run_v1.py                        # runs the v1 strategies and prints the results
 streamlit run app.py                            # then open the Coverage report page
 ```
+
+How the data was checked: [data sources](docs/data-source-evaluation.md), [sanity check against RSP](docs/sanity-check.md) and [review of every top-10 pick](docs/top10-review.md).
 
 Index membership **is included**: `data/constituents.parquet` is derived from [fja05680/sp500](https://github.com/fja05680/sp500) under the MIT licence (notice in `data/LICENSE-fja05680.txt`).
 

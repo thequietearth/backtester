@@ -2,8 +2,8 @@
 import pandas as pd
 import pytest
 
-from bt.data import (EODHDError, call_budget, candidate_codes, get_json, index_codes, parse_dividends,
-                     parse_eod, parse_splits, split_payload)
+from bt.data import (EODHDError, apply_price_exclusions, call_budget, candidate_codes, get_json, index_codes,
+                     parse_dividends, parse_eod, parse_splits, split_payload)
 
 KEY = "SECRET-KEY-123"
 
@@ -41,6 +41,18 @@ def test_call_budget():
     assert call_budget(100_000, 4_000, 500) == 500
     assert call_budget(100_000, 4_000, 0) == 0  # dry run must make no calls
     assert call_budget(20, 25, None) == 0  # never negative
+
+
+def test_price_exclusions_blank_known_bad_dates_only():
+    eod = parse_eod([{"date": d, "close": 10.0, "adjusted_close": 9.0, "volume": 1}
+                     for d in ["2001-01-26", "2001-01-29", "2001-01-30", "2002-06-03"]])
+    # Real case: Coastal (CGP) was bought on 2001-01-29; later prices are another instrument.
+    out = apply_price_exclusions(eod, [(pd.Timestamp("2001-01-30"), None)])
+    assert out.adjusted_close.notna().tolist() == [True, True, False, False]
+    assert out.close.notna().tolist() == [True, True, False, False]
+    assert out.volume.notna().all()  # only prices are blanked
+    bounded = apply_price_exclusions(eod, [(pd.Timestamp("2001-01-29"), pd.Timestamp("2001-01-30"))])
+    assert bounded.adjusted_close.notna().tolist() == [True, False, False, True]
 
 
 def test_split_payload_separates_warnings_from_data():

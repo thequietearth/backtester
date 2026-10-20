@@ -203,7 +203,7 @@ Suspect members aren't ranked, and they show up in the coverage gaps instead. Ju
 
 **Top pick per year after all checks** (pass test for top-1): every one is a genuine annual winner. Dell, Qualcomm, Reebok, Nvidia, Providian, Avaya, Autodesk, Valero, Allegheny Technologies, NOV, Family Dollar, XL, Netflix, Cabot Oil & Gas, PulteGroup, Netflix, Southwest, Netflix, Nvidia, NRG, AMD, AMD, Tesla, Devon, Occidental, Nvidia and Palantir, for 1999–2025 in order.
 
-**Not done yet:** each top-10 pick for 1999–2012 still needs checking. That's an M3 task (see PLAN.md).
+**Top-10 picks (M3):** all 270 for 1999–2025 were checked; see `docs/top10-review.md`. That review found five more broken histories that the automatic checks missed: Williams, L Brands, Coastal, Hercules and Johnson Controls. They are handled in `data/price_exclusions.csv` and `data/ticker_map.csv`. It also prompted an engine change: a held stock is sold after more than 10 trading days without a price, without looking ahead.
 
 **Pass test 3, dividends:** passes (`scripts/validate_prices.py`). For 20 stocks that still trade, each year's adjusted return beats the raw-price return by about the dividend yield (KO +3.1% a year, XOM +3.0%, SPY +2.0%). Against Yahoo's total-return prices, the median yearly difference is 0.0. Only 4 of 611 full years differ by more than 0.5 points: PFE 1995, JPM 1995 and 1996, and KO 2001 (by 0.6).
 

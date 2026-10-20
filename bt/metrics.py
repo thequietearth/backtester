@@ -65,8 +65,20 @@ def yearly_returns(equity: pd.Series) -> pd.Series:
     return year_end / base - 1
 
 
-def best_and_worst_year(equity: pd.Series) -> tuple[tuple[int, float], tuple[int, float]]:
-    yr = yearly_returns(equity)
+def holding_period_returns(equity: pd.Series, trade_dates) -> pd.Series:
+    """Return over each holding period: from one rebalance's close to the next one's,
+    labelled by the year the period starts. For a yearly strategy that's "the year of
+    each pick", which a calendar year isn't quite: picks switch at the close of the first
+    trading day, so a calendar year would include one day of the previous pick."""
+    dates = [d for d in pd.DatetimeIndex(trade_dates) if d in equity.index]
+    values = equity.loc[dates]
+    return pd.Series(values.iloc[1:].values / values.iloc[:-1].values - 1,
+                     index=[d.year for d in dates[:-1]], name="return")
+
+
+def best_and_worst_year(equity: pd.Series, returns: pd.Series | None = None) -> tuple[tuple[int, float], tuple[int, float]]:
+    """Best and worst year: calendar years by default, or any yearly series passed in."""
+    yr = yearly_returns(equity) if returns is None else returns
     return (int(yr.idxmax()), float(yr.max())), (int(yr.idxmin()), float(yr.min()))
 
 

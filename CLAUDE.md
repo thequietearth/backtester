@@ -62,6 +62,7 @@ v1 only rebalances once a year, but build the engine to accept any rebalance dat
 5. **Delisted while held.** If a held stock's prices stop before the holding period ends:
    - exit at the last available price and move that money to cash
    - flag the trade in the trade log as "data ended, real outcome unknown"
+   - detect the end without lookahead: a held stock is sold after more than 10 trading days in a row without a price (`bt/engine.py`), never by checking whether prices exist later
 6. **Removed from the index mid-year.** Keep holding the stock until the next rebalance. We own the stock, not the index.
 7. **Costs.** Charge transaction costs in basis points per side on every weight change. Make the rate configurable, default 10 bps.
 8. **Benchmark.** Always show results next to SPY over exactly the same dates.
