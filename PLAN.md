@@ -43,7 +43,7 @@ It uses point-in-time index membership and compares that strategy with SPY and w
 
 **Done when:** the price source passes the tests in `docs/data-source-evaluation.md`, the report runs end to end for 1996–2025, and Raymond has decided the start year and coverage threshold (record them under Decisions below).
 
-### M2: Engine and metrics
+### M2: Engine and metrics ✅ (done 2026-10-20)
 - **`engine.py`:** takes weights, prices and costs, and returns a daily equity curve, holdings and a trade log (with delisting flags).
 - **`metrics.py`:**
   - CAGR
@@ -87,7 +87,7 @@ It uses point-in-time index membership and compares that strategy with SPY and w
 **Done when:** a fresh clone, plus the data build script, plus `streamlit run app.py` reproduces the results, and the README and write-up are published.
 
 ### M5: v2 (only after v1 is shipped)
-- Contrarian: last year's worst N
+- Contrarian: last year's worst N. **Caution from M2's sanity check:** the price-sanity checks set aside real crashes along with broken data, which is exactly what this strategy looks for. Real crashes and data errors need telling apart (by hand, or with a second source) before its results can be trusted.
 - Simple trend rules on SPY:
   - 200-day moving average: hold SPY when it's above, cash when below
   - golden cross (50-day vs 200-day average)

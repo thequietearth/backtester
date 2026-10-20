@@ -47,8 +47,9 @@ def main():
     names = symbol_names()
     index = index_codes(names)
     overrides_path = ROOT / "data" / "ticker_map.csv"
+    # Hand-mapped codes apply only to the dates their override covers (apply_overrides);
+    # they are not automatic candidates for the ticker's other spells.
     overrides = pd.read_csv(overrides_path, dtype=str, comment="#") if overrides_path.exists() else None
-    extra = {} if overrides is None else overrides.dropna(subset=["code"]).groupby("ticker")["code"].apply(set).to_dict()
 
     spy = load_eod("SPY")
     calendar = pd.DatetimeIndex(spy["date"])
@@ -58,7 +59,7 @@ def main():
 
     rows = []
     for s in spells.itertuples():
-        codes = set(candidate_codes(s.ticker, index)) | extra.get(s.ticker, set())
+        codes = set(candidate_codes(s.ticker, index))
         assessed = {c: assess_candidate(s.start, s.end, p, calendar, as_of)
                     for c in sorted(codes) if (p := load_eod(c)) is not None and len(p)}
         code, status, flags = choose_security(assessed, multi_spell=n_spells[s.ticker] > 1)
@@ -110,6 +111,19 @@ def main():
     print("flags:", flags[flags != ""].value_counts().to_dict())
     print(f"prices.parquet: {prices.shape[1]:,} securities x {prices.shape[0]:,} days "
           f"({prices.index.min().date()} to {prices.index.max().date()})")
+
+    # One security must never stand for two index members at the same time: an
+    # equal-weight portfolio would hold it twice. (fja05680 lists a few companies twice.)
+    far = pd.Timestamp.max
+    shared = []
+    for code, g in smap.dropna(subset=["code"]).groupby("code"):
+        rows = list(g.itertuples())
+        for i, a in enumerate(rows):
+            for b in rows[i + 1:]:
+                if a.ticker != b.ticker and a.start < (b.end if pd.notna(b.end) else far) \
+                        and b.start < (a.end if pd.notna(a.end) else far):
+                    shared.append(f"{code} ({a.ticker} and {b.ticker})")
+    print("codes shared by two members at the same time:", ", ".join(shared) or "none")
 
     # Pass test 2: the known traps. Each row: (ticker, a date inside the spell, acceptable codes).
     # None in the acceptable set means "missing or flagged for review" is the right outcome.

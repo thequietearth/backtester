@@ -195,6 +195,11 @@ Suspect members aren't ranked, and they show up in the coverage gaps instead. Ju
 - `BBBY` → `BBBYQ`, the real Bed Bath & Beyond. EODHD's `BBBY` and `BBBY_old` are both Overstock's history.
 - `PBG` is excluded from December 2003, because EODHD's series becomes a different instrument in September 2004.
 - Ambac is excluded, because of its corrupt factor.
+- Found in M2's sanity check: two index tickers sharing one price series would be held twice by an equal-weight portfolio.
+  - fja05680 lists Times Mirror twice, as `TMC` and `TMC.A`. Only `TMC.A` is mapped.
+  - EODHD's `USW` holds MediaOne's prices, not U S West's, so U S West is missing.
+
+  `build_price_cache.py` now reports any code shared by two members at the same time.
 
 **Top pick per year after all checks** (pass test for top-1): every one is a genuine annual winner. Dell, Qualcomm, Reebok, Nvidia, Providian, Avaya, Autodesk, Valero, Allegheny Technologies, NOV, Family Dollar, XL, Netflix, Cabot Oil & Gas, PulteGroup, Netflix, Southwest, Netflix, Nvidia, NRG, AMD, AMD, Tesla, Devon, Occidental, Nvidia and Palantir, for 1999–2025 in order.
 

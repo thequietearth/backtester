@@ -23,7 +23,8 @@ PEAK,2019-11-05,2024-03-04,DOC,Healthpeak (ticker changed from PEAK to DOC in 20
 RE,2017-06-19,2023-07-10,EG,Everest Re (renamed Everest Group)
 RSHCQ,1996-01-02,2011-07-01,RSH,Tandy / RadioShack
 SUNEQ,2007-05-31,2011-12-19,WFR_old,MEMC Electronic Materials (later SunEdison) (checked)
-TMC,1996-01-02,2000-06-13,TMC-A,Times Mirror
+TMC,1996-01-02,2000-06-13,,Times Mirror is listed twice in fja05680 (TMC and TMC.A); TMC.A maps to TMC-A
+USW,1996-01-02,2000-07-03,,U S West: not in EODHD. EODHD's USW code holds MediaOne Group's prices (mapped under UMG)
 UAWGQ,1996-01-02,2002-05-15,,US Airways Group: EODHD's LCC is the post-2005 merged company
 UMG,1996-01-02,2000-06-15,USW,MediaOne Group
 WCOEQ,1996-04-01,2002-05-15,MCWEQ,WorldCom; EODHD's MCWEQ only starts in 2001-06
