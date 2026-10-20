@@ -70,7 +70,7 @@ It uses point-in-time index membership and compares that strategy with SPY and w
 
 **Done when:** each strategy runs over the full backtest period, a manual spot check of 3 years shows sensible picks, and every top-10 pick for 1999–2012 has been checked.
 
-### M4: GUI v1 and publish (v1 shipped)
+### M4: GUI v1 and publish (v1 shipped) ✅ (done 2026-10-20; a fresh clone reproduced every result exactly)
 - **Sidebar:** strategies (multi-select), N, start and end year, cost in bps, universe mode
 - **Main view:**
   - growth of $10k vs SPY, on a log scale

@@ -30,6 +30,7 @@ backtester/
     engine.py           # target weights -> daily equity curve + trade log
     strategies.py       # one function per strategy
     metrics.py          # CAGR, volatility, Sharpe, drawdown, etc.
+    report.py           # strategy runs over chosen years, summaries, year-by-year table
   data/
     raw/                # downloaded source files (gitignored)
     cache/              # parquet price cache (gitignored)
