@@ -8,8 +8,7 @@ import streamlit as st
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from bt.coverage import LOWER_PCT, TRUSTED_PCT, coverage_by_year  # noqa: E402
-from bt.universe import load_constituents  # noqa: E402
+from bt.coverage import LOWER_PCT, TRUSTED_PCT  # noqa: E402
 
 CACHE = ROOT / "data" / "cache"
 YEARS = range(1996, 2026)
@@ -19,6 +18,9 @@ BANDS = {"trusted": ("#0ca30c", "✓ trusted"), "lower coverage": ("#fab219", "�
          "unreliable": ("#d03b3b", "✕ unreliable")}
 
 st.set_page_config(page_title="Coverage report", layout="wide")
+with st.sidebar:
+    st.page_link("app.py", label="Results", icon="📈")
+    st.page_link("pages/1_Coverage.py", label="Coverage report", icon="📊")
 st.title("Coverage report")
 st.write(
     "For each backtest year: of the S&P 500 members on the formation date, how many have "
@@ -29,21 +31,18 @@ st.write(
     "too short. Members with broken prices or a doubtful identity are not ranked and count as gaps."
 )
 
-if not (CACHE / "prices.parquet").exists():
-    st.warning("No price cache yet. Run `scripts/download_eodhd.py --scope v1`, then "
-               "`scripts/build_price_cache.py`.")
+if not (CACHE / "coverage_pit_summary.parquet").exists():
+    st.warning("No coverage results yet. Run `python scripts/build_data.py` (see the README).")
     st.stop()
 
 
 @st.cache_data
 def load():
-    cons = load_constituents(ROOT / "data" / "constituents.parquet")
-    smap = pd.read_csv(CACHE / "security_map.csv", parse_dates=["start", "end"])
-    prices = pd.read_parquet(CACHE / "prices.parquet")
-    raw = pd.read_parquet(CACHE / "close.parquet")
-    factors = pd.read_parquet(CACHE / "split_factors.parquet")
-    return coverage_by_year(cons, smap, prices, prices["SPY"].dropna().index, YEARS,
-                            raw_prices=raw, split_factors=factors)
+    """Read the results scripts/build_universes.py saved; nothing is recomputed here."""
+    summary = pd.read_parquet(CACHE / "coverage_pit_summary.parquet")
+    detail = pd.read_parquet(CACHE / "coverage_pit_detail.parquet")
+    detail["flags"] = detail["flags"].fillna("")
+    return summary[summary.year.isin(YEARS)], detail[detail.year.isin(YEARS)]
 
 
 summary, detail = load()
@@ -53,7 +52,7 @@ c1, c2, c3 = st.columns(3)
 c1.metric(f"Trusted years ({START}–{bt_years.year.max()})",
           f"{(bt_years.band == 'trusted').sum()} of {len(bt_years)}")
 worst = bt_years.loc[bt_years.coverage_pct.idxmin()]
-c2.metric(f"Lowest coverage since {START}", f"{worst.coverage_pct:.1f}%", f"{worst.year}", delta_color="off")
+c2.metric(f"Lowest coverage since {START}", f"{worst.coverage_pct:.1f}% in {worst.year}")
 c3.metric(f"Member-years set aside as suspect since {START}", f"{int(bt_years.suspect.sum()):,}")
 
 fig = go.Figure()
@@ -71,8 +70,10 @@ fig.update_layout(barmode="overlay", bargap=0.25, height=360, margin=dict(t=20, 
                   legend=dict(orientation="h", y=1.08))
 st.plotly_chart(fig, width="stretch")
 
+columns = ["year", "formation_date", "members", "covered", "coverage_pct", "band", "suspect",
+           "ended_mid_year", "holding_jump", "formation_ok", "holding_ok", "flagged"]
 st.dataframe(summary.assign(band=summary.band.map(lambda b: BANDS[b][1]),
-                            formation_date=summary.formation_date.dt.date),
+                            formation_date=summary.formation_date.dt.date)[columns],
              hide_index=True, width="stretch")
 dl1, dl2 = st.columns(2)
 dl1.download_button("Download summary (CSV)", summary.to_csv(index=False), "coverage_summary.csv", "text/csv")
@@ -81,7 +82,7 @@ dl2.download_button("Download member detail (CSV)", detail.to_csv(index=False), 
 st.subheader("Members not covered or flagged")
 year = st.selectbox("Year", list(summary.year[::-1]))
 d = detail[detail.year == year]
-issues = d[(d.status != "ok") | d.ended_mid_year | (d.flags != "")]
+issues = d[(d.status != "ok") | d.ended_mid_year | (d["flags"] != "")]  # not d.flags: a pandas attribute
 st.caption(f"{len(issues)} of {len(d)} members in {year}. Statuses: suspect prices = the formation "
            "year shows a one-day doubling or halving, a hole of 10+ trading days, or an adjusted price "
            "that disagrees with the traded price; suspect identity = trades too little to be an S&P 500 "

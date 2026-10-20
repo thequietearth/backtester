@@ -1,15 +1,36 @@
 # Backtester
 
-A Streamlit app that backtests simple, rule-based stock strategies on the S&P 500 and compares them with SPY.
+A Streamlit app that backtests simple, rule-based stock strategies on the S&P 500 and compares them with SPY. It's built honestly:
+- **Point-in-time index membership:** the members of the time, not today's.
+- **Total-return prices,** including dividends, and **prices for companies that no longer trade.**
+- **A hand-written backtest engine with no lookahead.**
 
-The first question it answers: **what if you had bought last year's best-performing S&P 500 stock every January since 1999?** The answer aims to be honest, which means using:
-- the S&P 500 members as they were on each date, not today's list
-- prices that include dividends
-- prices for stocks that no longer trade
+**The first question:** what if, every January from 1999 to 2025, you had bought last year's best-performing S&P 500 stock?
 
-Leaving any of these out flatters the results; that's survivorship bias.
+| 1999–2025 | $10,000 becomes | Return per year | Worst fall | Sharpe |
+|---|---|---|---|---|
+| Last year's #1 | $115,600 | 9.5% | −98% | 0.44 |
+| Last year's top 10 | $109,000 | 9.3% | −83% | 0.44 |
+| SPY | $89,000 | 8.4% | −55% | 0.52 |
 
-> **Status:** under construction. Milestones and decisions are in [PLAN.md](PLAN.md).
+Chasing winners beat the index by about a point a year, but with far bigger crashes and a worse return per unit of risk. Done naively, on today's S&P 500 list, the same strategy appears to make **28% a year**: that's survivorship bias. **[Read the results →](docs/results.md)**
+
+![Growth of $10,000](docs/figures/growth.png)
+
+## The app
+The app runs locally. Choose strategies, N, years, trading costs and the universe; it shows the growth of $10k against SPY, drawdowns, metrics, and a year-by-year table with every pick.
+
+![The app](docs/screenshots/app.png)
+
+A coverage report shows, for each year, how many index members had usable price data.
+
+![Coverage report](docs/screenshots/coverage.png)
+
+## How it was checked
+- **[Data sources](docs/data-source-evaluation.md):** why EODHD (Yahoo and others lack delisted stocks), and the traps found, such as tickers reused by other companies and broken price histories.
+- **[Sanity check](docs/sanity-check.md):** an equal-weight S&P 500 built with the same data and engine tracks RSP, the real equal-weight ETF, within about 0.5 points a year.
+- **[Top-10 pick review](docs/top10-review.md):** all 270 picks for 1999–2025, checked against Yahoo or by hand.
+- **Tests:** 80 tests, including hand-worked engine and metric cases and a no-lookahead proof. Run `pytest`.
 
 ## Setup
 
@@ -22,30 +43,22 @@ pip install -r requirements.txt
 copy .env.example .env          # then put your EODHD API key in .env
 ```
 
-## Run
-
-```
-streamlit run app.py
-pytest
-```
-
 ## Data
 
-Price data is **not included** in this repo, because it is licensed for personal use only. You rebuild it locally with your own [EODHD](https://eodhd.com) API key (the Historian plan) in `.env`:
+Price data is **not included** in this repo, because it is licensed for personal use only. Rebuild it locally with your own [EODHD](https://eodhd.com) API key (the Historian plan) in `.env`:
 
 ```
-python scripts/download_eodhd.py --scope v1     # ~4,500 calls: every S&P 500 member since 1996, plus SPY and RSP
-python scripts/build_price_cache.py             # maps members to price series and runs the trap test
-python scripts/validate_prices.py               # checks that adjusted prices include dividends
-python scripts/run_v1.py                        # runs the v1 strategies and prints the results
-streamlit run app.py                            # then open the Coverage report page
+python scripts/build_data.py      # download (~4,500 calls, only what's missing), map, check, build universes
+streamlit run app.py              # explore the results
 ```
 
-How the data was checked: [data sources](docs/data-source-evaluation.md), [sanity check against RSP](docs/sanity-check.md) and [review of every top-10 pick](docs/top10-review.md).
+Other scripts:
+- `scripts/validate_prices.py` checks that the adjusted prices include dividends.
+- `scripts/run_v1.py` and `scripts/review_top10.py` print the full results and the pick review.
+- `scripts/make_figures.py` redraws the charts above.
+- `scripts/screenshots.py` retakes the screenshots. It needs `pip install -r requirements-dev.txt` and `python -m playwright install chromium`.
 
-Index membership **is included**: `data/constituents.parquet` is derived from [fja05680/sp500](https://github.com/fja05680/sp500) under the MIT licence (notice in `data/LICENSE-fja05680.txt`).
-
-How the data source was chosen, and how the alternatives compared: [docs/data-source-evaluation.md](docs/data-source-evaluation.md).
+Index membership **is included**: `data/constituents.parquet` is derived from [fja05680/sp500](https://github.com/fja05680/sp500) under the MIT licence (notice in `data/LICENSE-fja05680.txt`). Hand fixes to the data are in `data/ticker_map.csv` and `data/price_exclusions.csv`, each with a note explaining why.
 
 ## Licence
 

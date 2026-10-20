@@ -1,0 +1,4 @@
+# The app runs locally: no deploy button, and labelled page links instead of file names.
+[client]
+toolbarMode = "minimal"
+showSidebarNavigation = false
