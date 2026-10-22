@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from bt.report import backtest_window, run_strategy, year_table
+from bt.report import backtest_window, daily_decisions, run_strategy, summary, year_table
 
 CAL = pd.bdate_range("2019-12-02", "2022-01-31")
 
@@ -13,6 +13,42 @@ def test_backtest_window_years_run_from_purchase_to_next_purchase():
     assert w.rebalance == [pd.Timestamp("2019-12-31"), pd.Timestamp("2020-12-31")]  # formation dates
     assert w.boundaries == [pd.Timestamp("2020-01-01"), pd.Timestamp("2021-01-01"), pd.Timestamp("2022-01-03")]
     assert w.end == pd.Timestamp("2022-01-03")  # first trading day after the last year: the last sale
+
+
+def test_daily_decisions_run_from_the_first_formation_date_to_before_the_final_sale():
+    w = backtest_window(CAL, 2020, 2021)
+    d = daily_decisions(CAL, w)
+    assert d[0] == pd.Timestamp("2019-12-31") and d[-1] == pd.Timestamp("2021-12-31")
+
+
+def test_timing_rule_year_table_and_summary_show_time_invested_and_trades():
+    prices = pd.DataFrame({"SPY": 100.0}, index=CAL)
+    w = backtest_window(CAL, 2020, 2021)
+    days = daily_decisions(CAL, w)
+    hold = (days >= pd.Timestamp("2020-03-02")) & (days < pd.Timestamp("2020-09-01"))
+    weights = pd.DataFrame({"SPY": hold.astype(float)}, index=days)
+    run = run_strategy("200-day trend", weights, prices, 0, CAL, w)
+    spy = run_strategy("SPY", pd.DataFrame({"SPY": [1.0]}, index=w.rebalance[:1]), prices, 0, CAL, w)
+    # Bought at the close of 3 Mar (day after the first "hold"), sold at the close of 2 Sep.
+    year = pd.bdate_range("2020-01-01", "2020-12-31")
+    invested = pd.bdate_range("2020-03-03", "2020-09-01")
+    t = year_table(run, spy, {}, None, timing=True)
+    assert list(t["Holdings"]) == [f"invested {100 * len(invested) / len(year):.0f}% of the time, 2 trades",
+                                   "invested 0% of the time, 0 trades"]
+    s = summary(run, spy)
+    assert s["Trades per year"] == pytest.approx(1.0)  # 2 trades over 2 years
+    assert s["Time invested %"] == pytest.approx(100 * len(invested) / len(run.equity))
+
+
+def test_cash_rate_flows_into_returns_and_sharpe():
+    prices = pd.DataFrame({"SPY": 100.0}, index=CAL)
+    w = backtest_window(CAL, 2020, 2021)
+    cash_only = pd.DataFrame({"SPY": [0.0]}, index=w.rebalance[:1])
+    rate = pd.Series(0.05, index=CAL)
+    run = run_strategy("cash", cash_only, prices, 0, CAL, w, cash_rate=rate)
+    assert run.yearly[2020] == pytest.approx(1.05 ** (366 / 365) - 1, rel=1e-3)  # 2020 had 366 days
+    spy = run_strategy("SPY", pd.DataFrame({"SPY": [1.0]}, index=w.rebalance[:1]), prices, 0, CAL, w, cash_rate=rate)
+    assert np.isnan(summary(run, spy)["Sharpe"])  # earning exactly the T-bill rate: no excess, no risk
 
 
 def test_year_table_lists_holdings_returns_beat_and_coverage():

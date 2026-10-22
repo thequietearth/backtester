@@ -35,6 +35,8 @@ backtester/
     raw/                # downloaded source files (gitignored)
     cache/              # parquet price cache (gitignored)
     ticker_map.csv      # (ticker, date range) -> symbol to download, hand-maintained
+    price_exclusions.csv  # known-bad price dates, blanked (never edited)
+    tbill_dtb3.csv      # 3-month T-bill rates from FRED (public domain): what cash earns
   scripts/              # one-off build scripts (download, build cache)
   docs/                 # write-ups (e.g. sanity-check.md)
   tests/

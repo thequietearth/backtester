@@ -9,7 +9,9 @@ import pandas as pd
 import pytest
 
 from bt.coverage import RANKABLE, coverage_by_year, rankable_universe
-from bt.strategies import spy_buy_and_hold, top_n
+from bt.engine import run_backtest
+from bt.strategies import (rsi, rsi2_positions, spy_buy_and_hold, spy_golden_cross, spy_rsi2, spy_trend,
+                           top_n)
 from bt.universe import members_on, naive_constituents, naive_security_map
 
 DAYS = pd.bdate_range("2019-12-02", "2021-01-29")
@@ -61,6 +63,65 @@ def test_spy_buy_and_hold_is_a_single_purchase_at_the_first_date():
     dates = [F_DATE, pd.Timestamp("2021-12-31")]
     w = spy_buy_and_hold(PRICES, UNIVERSE, dates)
     assert list(w.index) == [F_DATE] and w.loc[F_DATE].to_dict() == {"SPY": 1.0}
+
+
+# --- SPY timing rules (hand-worked on a 10-day path) -------------------------------
+
+PATH_DAYS = pd.bdate_range("2024-01-01", periods=10)
+PATH = pd.DataFrame({"SPY": [10, 10, 10, 11, 12, 11, 9, 8, 9, 11]}, index=PATH_DAYS, dtype=float)
+
+
+def held(w):
+    return w["SPY"].astype(int).tolist()
+
+
+def test_trend_rule_holds_spy_only_above_its_moving_average():
+    # 3-day averages from day 2: 10, 10.33, 11, 11.33, 10.67, 9.33, 8.67, 9.33.
+    # Above it on days 3 (11 > 10.33), 4 (12 > 11), 8 (9 > 8.67) and 9 (11 > 9.33).
+    assert held(spy_trend(PATH, {}, PATH_DAYS, window=3)) == [0, 0, 0, 1, 1, 0, 0, 0, 1, 1]
+
+
+def test_golden_cross_holds_when_the_fast_average_is_above_the_slow_one():
+    # 2-day vs 3-day averages: days 3 (10.5 > 10.33), 4 (11.5 > 11), 5 (11.5 > 11.33), 9 (10 > 9.33).
+    assert held(spy_golden_cross(PATH, {}, PATH_DAYS, fast=2, slow=3)) == [0, 0, 0, 1, 1, 1, 0, 0, 0, 1]
+
+
+def test_rsi_uses_wilders_smoothing():
+    # Changes +1, +1, -1, -1, +1. First average (2 days): gain 1, loss 0 -> RSI 100.
+    # Then avg = (previous * 1 + today) / 2: gains 0.5, 0.25, 0.625; losses 0.5, 0.75, 0.375.
+    r = rsi(pd.Series([10, 11, 12, 11, 10, 11], dtype=float), period=2)
+    assert r.isna().tolist()[:2] == [True, True]
+    np.testing.assert_allclose(r.iloc[2:].values, [100, 50, 25, 62.5])
+
+
+def test_rsi2_buys_a_sharp_dip_in_an_uptrend_and_sells_on_the_bounce():
+    close = pd.Series([100.0] * 6)
+    rsi_v = pd.Series([50, 5, 5, 8, 40, 5])
+    trend = pd.Series([90, 90, 90, 90, 90, 110])  # day 5: below the long-term average
+    exit_ = pd.Series([105, 105, 105, 99, 105, 105])  # day 3: closes above the short average
+    # Day 1 buys (RSI 5 < 10, above trend); held until day 3 closes above its short average.
+    # Day 5 has RSI 5 again but is below the trend, so no purchase.
+    assert rsi2_positions(close, rsi_v, trend, exit_, entry=10).tolist() == [False, True, True, False, False, False]
+
+
+def test_timing_rules_pay_costs_only_when_the_signal_flips():
+    w = spy_trend(PATH, {}, PATH_DAYS, window=3)
+    with pytest.warns(UserWarning, match="no trading day after"):  # the last day's decision can't trade
+        trades = run_backtest(w, PATH, cost_bps=10).trades
+    # Signal flips in on day 3, out on day 5, in on day 8 -> trades on days 4, 6 and 9 only.
+    assert trades.action.tolist() == ["buy", "sell", "buy"]
+    assert list(trades.date) == [PATH_DAYS[4], PATH_DAYS[6], PATH_DAYS[9]]
+
+
+@pytest.mark.parametrize("rule", [spy_trend, spy_golden_cross, spy_rsi2])
+def test_timing_rules_ignore_prices_after_the_decision_date(rule):
+    rng = np.random.default_rng(3)
+    days = pd.bdate_range("2020-01-01", periods=600)
+    spy = pd.DataFrame({"SPY": 100 * np.exp(np.cumsum(rng.normal(0.0004, 0.012, len(days))))}, index=days)
+    t = days[450]
+    changed = spy.copy()
+    changed.loc[changed.index > t, "SPY"] *= rng.uniform(0.5, 1.5, (changed.index > t).sum())
+    pd.testing.assert_frame_equal(rule(spy, {}, days).loc[:t], rule(changed, {}, days).loc[:t])
 
 
 # --- Universes ---------------------------------------------------------------------

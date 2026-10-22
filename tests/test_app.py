@@ -20,9 +20,22 @@ def app():
 def test_default_view():
     at = app()
     assert not at.exception
-    labels = [m.label for m in at.metric]
-    assert "Return per year (CAGR)" in labels and "Years beating SPY" in labels
-    assert len(at.dataframe) == 2  # a year-by-year table for each strategy
+    comparison = at.dataframe[0].value
+    assert list(comparison["Strategy"]) == ["Last year's #1", "Last year's top 10", "SPY (benchmark)"]
+    assert "Invested" in comparison.columns and "Trades/yr" in comparison.columns
+    assert len(at.dataframe) == 3  # the comparison, plus a year-by-year table for each strategy
+
+
+def test_comparison_of_four_strategies_including_timing_rules():
+    at = app()
+    at.multiselect(key="strategies").set_value(
+        ["Last year's top N", "SPY 200-day trend", "SPY golden cross (50/200 days)", "SPY RSI(2) dip-buying"])
+    at.run()
+    assert not at.exception
+    comparison = at.dataframe[0].value
+    assert len(comparison) == 5  # four strategies and SPY
+    trend = comparison[comparison.Strategy == "SPY 200-day trend"].iloc[0]
+    assert trend["Invested"] != "100%"  # it does sit in cash sometimes
 
 
 def test_coverage_page_lists_only_members_with_issues():
@@ -43,6 +56,8 @@ def test_coverage_page_lists_only_members_with_issues():
     lambda at: at.select_slider(key="years").set_value((2010, 2015)),
     lambda at: at.radio(key="universe").set_value(at.radio(key="universe").options[1]),
     lambda at: at.multiselect(key="strategies").set_value([]),
+    lambda at: at.radio(key="cash").set_value("0%"),
+    lambda at: at.multiselect(key="strategies").set_value(["SPY RSI(2) dip-buying"]),
 ])
 def test_settings_render(change):
     at = app()

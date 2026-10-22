@@ -87,13 +87,23 @@ It uses point-in-time index membership and compares that strategy with SPY and w
 **Done when:** a fresh clone, plus the data build script, plus `streamlit run app.py` reproduces the results, and the README and write-up are published.
 
 ### M5: v2 (only after v1 is shipped)
-- Contrarian: last year's worst N. **Caution from M2's sanity check:** the price-sanity checks set aside real crashes along with broken data, which is exactly what this strategy looks for. Real crashes and data errors need telling apart (by hand, or with a second source) before its results can be trusted.
+Build in this order, each step with its own plan and done-criteria.
+
+**M5a: SPY trend rules and the comparison view** ✅ (done 2026-10-22)
 - Simple trend rules on SPY:
   - 200-day moving average: hold SPY when it's above, cash when below
   - golden cross (50-day vs 200-day average)
   - RSI(2) mean reversion
 - Comparison view: pick any 2–4 strategies side by side
-- Ideas that need more data work (assess before building):
+
+**M5b: price-based strategies on the point-in-time S&P 500** (uses data already downloaded)
+- Academic momentum: rank on the last 12 months excluding the most recent month, hold the top 10%, rebalance monthly. The research version of v1's "last year's winners"
+- Low volatility: hold the 50 least volatile stocks of the past year
+
+**M5c: contrarian**
+- Last year's worst N. **Caution from M2's sanity check:** the price-sanity checks set aside real crashes along with broken data, which is exactly what this strategy looks for. Real crashes and data errors need telling apart (by hand, or with a second source) before its results can be trusted.
+
+**Ideas that need more data work (assess before building):**
   - Dogs of the Dow: needs point-in-time Dow members and dividend history
   - Cap-weighted vs equal-weighted: needs historical shares outstanding
 
@@ -120,7 +130,9 @@ It uses point-in-time index membership and compares that strategy with SPY and w
 | Removed from the index mid-year | Keep holding until the next rebalance | Default |
 | Delisted while held | Exit at the last price, flag the outcome as unknown | Default |
 | Transaction cost | 10 bps per side | Default |
-| Risk-free rate for Sharpe | 0 | Revisit in v2 |
+| Risk-free rate and cash | 3-month T-bill rate (FRED DTB3, committed), accrued daily at the previous day's rate. Cash earns it, and Sharpe is measured beyond it. The app can switch to 0% | Decided (M5a). At 0%, timing rules lose 0.5–1.8 points a year |
+| Charts with several strategies | Small multiples: one chart per strategy against SPY, all on one scale. More than three lines in one chart can't be told apart reliably (palette validator) | Decided (M5a) |
+| Timing-rule execution | Decide at the close, trade at the next close (no lookahead). Published RSI(2) results trade at the signal day's close, which flatters them | Decided (M5a) |
 | Publishing | Local app; public code and a write-up | Decided |
 | Repo visibility | Public code, never any price data | Decided |
 | Code licence | MIT | Decided |
@@ -133,4 +145,6 @@ It uses point-in-time index membership and compares that strategy with SPY and w
 - Parameter sensitivity view (e.g. N from 1 to 50)
 - Bootstrap or Monte Carlo resampling of yearly returns, to show how much of the result is luck
 - Multi-asset ETF strategies
+- Fundamental strategies: low P/E, high free-cash-flow yield, quality (return on capital), Greenblatt's "Magic Formula". Needs point-in-time fundamentals: SEC EDGAR XBRL data is free, carries each figure's filing date and covers delisted companies, from about 2009. Use a figure only after its filing date, as originally reported. A data project on the scale of M1; fits the trusted 2010–2025 years
+- Dividend-yield strategy (trailing 12-month dividends ÷ price); the dividend data is already downloaded
 - Norgate Platinum ($630/year: prices from 1990, delisted stocks, daily index membership) if EODHD's early years turn out too thin

@@ -2,7 +2,8 @@
 
 Usage: python scripts/screenshots.py   (after scripts/build_data.py)
 Needs the dev tools: pip install -r requirements-dev.txt && python -m playwright install chromium
-Writes docs/screenshots/app.png and docs/screenshots/coverage.png.
+Writes docs/screenshots/app.png (default view), comparison.png (four strategies) and
+coverage.png.
 """
 import subprocess
 import sys
@@ -29,15 +30,19 @@ def wait_for_server(timeout=120):
     raise RuntimeError("the app didn't start")
 
 
-def capture(page, path, out, wait_text):
-    page.goto(f"{URL}{path}")
-    page.get_by_text(wait_text).first.wait_for(timeout=180_000)
+def shoot(page, out):
     page.wait_for_selector(".js-plotly-plot", timeout=180_000)
     page.wait_for_load_state("networkidle")
     time.sleep(3)  # let charts finish drawing
     height = page.evaluate("document.querySelector('[data-testid=\"stMainBlockContainer\"]').scrollHeight")
     page.screenshot(path=str(out), clip={"x": 0, "y": 0, "width": 1440, "height": min(height + 120, 6000)})
     print(f"wrote {out.relative_to(ROOT)}")
+
+
+def capture(page, path, out, wait_text):
+    page.goto(f"{URL}{path}")
+    page.get_by_text(wait_text).first.wait_for(timeout=180_000)
+    shoot(page, out)
 
 
 def main():
@@ -54,6 +59,15 @@ def main():
             # screen: use a window tall enough to show everything instead.
             page = browser.new_page(viewport={"width": 1440, "height": 6000}, device_scale_factor=1)
             capture(page, "/", OUT / "app.png", "Year by year")
+            # The comparison view: add two SPY timing rules to the default two strategies.
+            for option in ("SPY 200-day trend", "SPY golden cross (50/200 days)"):
+                page.locator('[data-testid="stMultiSelect"] input').first.click()
+                page.get_by_role("option", name=option).click()
+                page.keyboard.press("Escape")
+            # Wait until the new strategies' charts exist, then for the rerun to finish.
+            page.locator(".js-plotly-plot text", has_text="SPY golden cross").first.wait_for(timeout=180_000)
+            page.wait_for_selector('[data-testid="stStatusWidget"]', state="detached", timeout=180_000)
+            shoot(page, OUT / "comparison.png")
             capture(page, "/Coverage", OUT / "coverage.png", "Members not covered or flagged")
             browser.close()
     finally:

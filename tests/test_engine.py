@@ -132,6 +132,34 @@ def test_zero_cost_reproduces_the_price_path_exactly():
     np.testing.assert_allclose(r.equity.values, [1.0, 12 / 11, 9.9 / 11])
 
 
+def test_cash_earns_interest_at_the_previous_days_rate():
+    # D: Mon 1 Jan .. Mon 8 Jan 2024. All cash from day 1 (a decision to hold nothing).
+    # 3.65% a year, accrued over calendar days: Tue->Wed->Thu->Fri is 1 day each,
+    # Fri->Mon is 3 days, so by Monday the factor is 1.0365^(6/365).
+    prices = frame(A=[10, 10, 10, 10, 10, 10])
+    rate = pd.Series(0.0365, index=D)
+    r = run_backtest(weights({0: {"A": 0.0}}), prices, cost_bps=10, cash_rate=rate)
+    assert r.equity[D[1]] == pytest.approx(1.0)  # no interest before the first day
+    assert r.equity[D[5]] == pytest.approx(1.0365 ** (6 / 365))
+
+
+def test_interest_uses_the_rate_known_the_day_before():
+    prices = frame(A=[10, 10, 10, 10])
+    rate = pd.Series([0.0365, 0.0365, 0.0730, 0.0730], index=D[:4])
+    r = run_backtest(weights({0: {"A": 0.0}}), prices, cost_bps=10, cash_rate=rate)
+    # Day 2 accrues at day 1's rate (3.65%); day 3 accrues at day 2's rate (7.30%).
+    assert r.equity[D[2]] == pytest.approx(1.0365 ** (1 / 365))
+    assert r.equity[D[3]] == pytest.approx(1.0365 ** (1 / 365) * 1.0730 ** (1 / 365))
+
+
+def test_only_the_cash_part_earns_interest():
+    prices = frame(A=[10, 10, 10, 10])
+    rate = pd.Series(0.0365, index=D[:4])
+    r = run_backtest(weights({0: {"A": 0.5}}), prices, cost_bps=0, cash_rate=rate)
+    # Half in A (flat price), half cash: after 2 days 0.5 + 0.5 * 1.0365^(2/365).
+    assert r.equity[D[3]] == pytest.approx(0.5 + 0.5 * 1.0365 ** (2 / 365))
+
+
 def test_rejects_leverage_and_short_selling():
     prices = frame(A=[10, 10], B=[10, 10])
     with pytest.raises(ValueError, match="sum"):

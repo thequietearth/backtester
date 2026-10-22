@@ -1,9 +1,9 @@
 """Static charts and numbers for docs/results.md, at the app's default settings
-(1999-2025, last year's #1 and top 10, 10 bps per side).
+(1999-2025, 10 bps per side, cash earning the 3-month T-bill rate).
 
 Usage: python scripts/make_figures.py   (after scripts/build_data.py)
-Writes docs/figures/growth.png, drawdown.png, survivorship.png and prints the numbers
-the write-up quotes. Colours are the app's validated palette (light surface).
+Writes docs/figures/growth.png, drawdown.png, survivorship.png, timing.png and prints
+the numbers the write-up quotes. Colours are the app's validated palette (light surface).
 """
 import sys
 from pathlib import Path
@@ -19,9 +19,10 @@ import pandas as pd  # noqa: E402
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from bt.coverage import rankable_universe  # noqa: E402
+from bt.data import load_tbill  # noqa: E402
 from bt.metrics import drawdown_series  # noqa: E402
-from bt.report import backtest_window, run_strategy, summary  # noqa: E402
-from bt.strategies import spy_buy_and_hold, top_n  # noqa: E402
+from bt.report import backtest_window, daily_decisions, run_strategy, summary  # noqa: E402
+from bt.strategies import spy_buy_and_hold, spy_golden_cross, spy_rsi2, spy_trend, top_n  # noqa: E402
 from bt.universe import formation_dates  # noqa: E402
 
 CACHE = ROOT / "data" / "cache"
@@ -48,13 +49,20 @@ def dollars(v, _):
 def main():
     prices = pd.read_parquet(CACHE / "prices.parquet")
     cal = prices["SPY"].dropna().index
+    tbill = load_tbill(ROOT / "data" / "tbill_dtb3.csv")
     w = backtest_window(cal, 1999, 2025)
     runs = {}
     for label, file in (("pit", "coverage_pit_detail.parquet"), ("naive", "coverage_naive_detail.parquet")):
         universe = rankable_universe(pd.read_parquet(CACHE / file), formation_dates(cal, w.years))
-        runs[label, "top1"] = run_strategy("Last year's #1", top_n(prices, universe, w.rebalance, n=1), prices, 10, cal, w)
-        runs[label, "top10"] = run_strategy("Last year's top 10", top_n(prices, universe, w.rebalance, n=10), prices, 10, cal, w)
-    spy = run_strategy("SPY (benchmark)", spy_buy_and_hold(prices, {}, w.rebalance), prices, 10, cal, w)
+        runs[label, "top1"] = run_strategy("Last year's #1", top_n(prices, universe, w.rebalance, n=1),
+                                           prices, 10, cal, w, tbill)
+        runs[label, "top10"] = run_strategy("Last year's top 10", top_n(prices, universe, w.rebalance, n=10),
+                                            prices, 10, cal, w, tbill)
+    spy = run_strategy("SPY (benchmark)", spy_buy_and_hold(prices, {}, w.rebalance), prices, 10, cal, w, tbill)
+    days = daily_decisions(cal, w)
+    timing = [run_strategy(name, rule(prices, {}, days), prices, 10, cal, w, tbill)
+              for name, rule in (("SPY 200-day trend", spy_trend), ("SPY golden cross (50/200 days)", spy_golden_cross),
+                                 ("SPY RSI(2) dip-buying", spy_rsi2))]
     series = [(runs["pit", "top1"], BLUE, "-"), (runs["pit", "top10"], ORANGE, "-"), (spy, AQUA, "--")]
     OUT.mkdir(parents=True, exist_ok=True)
 
@@ -105,16 +113,38 @@ def main():
               frameon=False, loc="upper left", labelcolor=INK)
     fig.tight_layout()
     fig.savefig(OUT / "survivorship.png", dpi=150)
-    print("wrote docs/figures/growth.png, drawdown.png, survivorship.png\n")
+    # Timing rules: one small panel per rule against SPY, all on the same scale.
+    fig, axes = plt.subplots(1, 3, figsize=(12, 4), sharey=True, facecolor=SURFACE)
+    for ax, run in zip(axes, timing):
+        ax.plot(10_000 * run.equity, color=BLUE, linewidth=1.8, label="Strategy")
+        ax.plot(10_000 * spy.equity, color=AQUA, linestyle="--", linewidth=1.6, label="SPY (benchmark)")
+        ax.set_yscale("log")
+        ax.yaxis.set_major_locator(mticker.LogLocator(base=10, subs=(1, 2, 5)))
+        ax.yaxis.set_major_formatter(mticker.FuncFormatter(dollars))
+        ax.yaxis.set_minor_locator(mticker.NullLocator())
+        style(ax, "")
+        ax.set_title(run.name, loc="left", fontsize=11, color=INK)
+    axes[0].legend(frameon=False, loc="upper left", labelcolor=INK, fontsize=9)
+    fig.suptitle("Timing rules on SPY: growth of $10,000, 1999–2025 (log scale)", x=0.01, ha="left",
+                 fontsize=13, fontweight="bold", color=INK)
+    fig.tight_layout()
+    fig.savefig(OUT / "timing.png", dpi=150)
+    print("wrote docs/figures/growth.png, drawdown.png, survivorship.png, timing.png\n")
 
-    table = pd.DataFrame([summary(runs["pit", "top1"], spy), summary(runs["pit", "top10"], spy), summary(spy, spy),
+    table = pd.DataFrame([summary(runs["pit", "top1"], spy), summary(runs["pit", "top10"], spy),
+                          *[summary(r, spy) for r in timing], summary(spy, spy),
                           {**summary(runs["naive", "top1"], spy), "Strategy": "Last year's #1 (naive)"},
                           {**summary(runs["naive", "top10"], spy), "Strategy": "Last year's top 10 (naive)"}])
     print(table.round(2).to_string(index=False))
+    u = rankable_universe(pd.read_parquet(CACHE / "coverage_pit_detail.parquet"), formation_dates(cal, w.years))
     for cost in (0, 50):
-        u = rankable_universe(pd.read_parquet(CACHE / "coverage_pit_detail.parquet"), formation_dates(cal, w.years))
-        r = run_strategy("top1", top_n(prices, u, w.rebalance, n=1), prices, cost, cal, w)
+        r = run_strategy("top1", top_n(prices, u, w.rebalance, n=1), prices, cost, cal, w, tbill)
         print(f"last year's #1 at {cost} bps: CAGR {summary(r, spy)['CAGR %']:.2f}%")
+    zero_spy = run_strategy("SPY", spy_buy_and_hold(prices, {}, w.rebalance), prices, 10, cal, w)
+    for (name, rule), run in zip((("200-day", spy_trend), ("golden cross", spy_golden_cross), ("RSI(2)", spy_rsi2)), timing):
+        zero = run_strategy(name, rule(prices, {}, days), prices, 10, cal, w)
+        print(f"{name} with cash at 0% instead of T-bills: CAGR {summary(zero, zero_spy)['CAGR %']:.2f}% "
+              f"(vs {summary(run, spy)['CAGR %']:.2f}%)")
 
 
 if __name__ == "__main__":

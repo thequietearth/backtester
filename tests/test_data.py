@@ -2,8 +2,8 @@
 import pandas as pd
 import pytest
 
-from bt.data import (EODHDError, apply_price_exclusions, call_budget, candidate_codes, get_json, index_codes,
-                     parse_dividends, parse_eod, parse_splits, split_payload)
+from bt.data import (EODHDError, apply_price_exclusions, call_budget, candidate_codes, cash_returns, get_json,
+                     index_codes, load_tbill, parse_dividends, parse_eod, parse_splits, split_payload)
 
 KEY = "SECRET-KEY-123"
 
@@ -53,6 +53,23 @@ def test_price_exclusions_blank_known_bad_dates_only():
     assert out.volume.notna().all()  # only prices are blanked
     bounded = apply_price_exclusions(eod, [(pd.Timestamp("2001-01-29"), pd.Timestamp("2001-01-30"))])
     assert bounded.adjusted_close.notna().tolist() == [True, False, False, True]
+
+
+def test_load_tbill_reads_fred_csv_as_yearly_decimal_rates(tmp_path):
+    p = tmp_path / "dtb3.csv"
+    p.write_text("observation_date,DTB3\n2024-01-02,5.25\n2024-01-03,\n2024-01-04,5.10\n")
+    rate = load_tbill(p)
+    assert rate.tolist()[0] == pytest.approx(0.0525) and rate.tolist()[2] == pytest.approx(0.051)
+    assert pd.isna(rate.iloc[1])  # a holiday: left empty, filled with the day before when used
+
+
+def test_cash_returns_accrue_calendar_days_at_the_previous_days_rate():
+    cal = pd.to_datetime(["2024-01-04", "2024-01-05", "2024-01-08"])  # Thu, Fri, Mon
+    rate = pd.Series([0.0365, 0.0730], index=pd.to_datetime(["2024-01-04", "2024-01-05"]))
+    r = cash_returns(cal, rate)
+    assert r.iloc[0] == 0.0
+    assert r.iloc[1] == pytest.approx(1.0365 ** (1 / 365) - 1)  # Thu's rate, 1 day
+    assert r.iloc[2] == pytest.approx(1.0730 ** (3 / 365) - 1)  # Fri's rate, 3 days (weekend)
 
 
 def test_split_payload_separates_warnings_from_data():

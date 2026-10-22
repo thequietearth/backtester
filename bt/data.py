@@ -159,6 +159,28 @@ def candidate_codes(ticker: str, index: dict[str, list[str]]) -> list[str]:
     return sorted(index.get(ticker.replace(".", "-"), []))
 
 
+def load_tbill(path: str | Path) -> pd.Series:
+    """FRED's DTB3 series (3-month US Treasury bill rate, in percent) as yearly decimal
+    rates by date. Holidays are blank in the file and stay NaN here. DTB3 is quoted on a
+    discount basis; treating it as a plain yearly rate understates it by a few hundredths
+    of a percent, which doesn't matter here."""
+    df = pd.read_csv(path)
+    rates = pd.to_numeric(df.iloc[:, 1], errors="coerce") / 100
+    return pd.Series(rates.values, index=pd.to_datetime(df.iloc[:, 0]), name="tbill")
+
+
+def cash_returns(calendar, annual_rate: pd.Series) -> pd.Series:
+    """Daily return on cash for each trading day:
+        (1 + r) ** (calendar days since the previous trading day / 365) - 1
+    where r is the yearly rate known at the previous trading day's close - so nothing is
+    used before it's known, and a weekend earns three days. The first day earns nothing."""
+    cal = pd.DatetimeIndex(calendar)
+    rate = annual_rate.sort_index()
+    rate = rate.reindex(rate.index.union(cal)).ffill().reindex(cal)
+    days = pd.Series(cal, index=cal).diff().dt.days
+    return ((1 + rate.shift(1)) ** (days / 365) - 1).fillna(0.0)
+
+
 def apply_price_exclusions(eod: pd.DataFrame, ranges) -> pd.DataFrame:
     """Blank the prices (close and adjusted close) inside known-bad date ranges, listed by
     hand in data/price_exclusions.csv. `ranges` is [(start, end or None for "onwards")].

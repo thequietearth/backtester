@@ -6,7 +6,8 @@ index. Rules (CLAUDE.md):
 - Timing: weights decided at the close of day t trade at the close of the next trading
   day, so a decision can only use what was known at t.
 - Between trades, positions move with their own adjusted (total-return) prices and are
-  never re-weighted: buy and hold. Unused weight is cash, earning 0%.
+  never re-weighted: buy and hold. Unused weight is cash, which earns `cash_rate` (e.g.
+  the 3-month T-bill rate), accrued daily at the previous day's rate; 0% if not given.
 - Costs: cost_bps of the value traded, on every trade. After a rebalance each position is
   exactly its target share of the post-cost equity E', which solves
       E' = E - c * sum(|w_i * E' - V_i|)        (c = cost_bps / 10,000)
@@ -26,6 +27,8 @@ from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
+
+from bt.data import cash_returns
 
 DATA_ENDED = "data ended, real outcome unknown"
 NO_PRICE = "no price on the trade date"
@@ -73,14 +76,16 @@ def _trade_plan(weights: pd.DataFrame, calendar: pd.DatetimeIndex) -> dict:
 
 
 def run_backtest(weights: pd.DataFrame, prices: pd.DataFrame, cost_bps: float = 10.0,
-                 initial: float = 1.0, calendar=None) -> BacktestResult:
+                 initial: float = 1.0, calendar=None, cash_rate: pd.Series | None = None) -> BacktestResult:
     """Run target weights (rows = decision dates, columns = codes) through prices
-    (adjusted close, one column per code). `calendar` defaults to the price dates."""
+    (adjusted close, one column per code). `calendar` defaults to the price dates;
+    `cash_rate` is a yearly rate by date (decimal) that cash earns, or None for 0%."""
     c = cost_bps / 10_000
     w = _validate(weights)
     cal = pd.DatetimeIndex(calendar if calendar is not None else prices.index)
     px = prices.reindex(cal)
     plan = _trade_plan(w, cal)
+    interest = cash_returns(cal, cash_rate) if cash_rate is not None else None
     empty = BacktestResult(pd.Series(dtype=float), pd.DataFrame(),
                            pd.DataFrame(columns=["date", "code", "action", "value", "price", "cost", "note"]))
     if not plan:
@@ -92,7 +97,9 @@ def run_backtest(weights: pd.DataFrame, prices: pd.DataFrame, cost_bps: float = 
     missing: dict[str, int] = {}      # code -> trading days in a row without a price
     cash = initial
     dates, equity, holdings, trades = [], [], [], []
-    for t in cal[cal >= min(plan)]:
+    for i, t in enumerate(cal[cal >= min(plan)]):
+        if interest is not None and i > 0:  # cash earns interest from the second day on
+            cash *= 1 + interest[t]
         # 1. Mark to market; after a long run without prices, treat the data as ended.
         for k in list(positions):
             p = px.at[t, k]

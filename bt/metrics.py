@@ -7,9 +7,9 @@ Conventions:
 - Volatility and Sharpe annualise daily figures with 252 trading days a year:
   volatility x sqrt(252), because the spread of independent daily moves grows with the
   square root of time.
-- Sharpe uses a risk-free rate of 0 in v1. It then measures return per unit of risk
-  against holding cash that earns nothing. With real T-bill rates (0-5% over the
-  period) every Sharpe ratio would be somewhat lower; PLAN.md revisits this in v2.
+- Sharpe measures the return earned beyond cash, per unit of risk. Pass the daily T-bill
+  return as `risk_free` (bt.data.cash_returns); without it, cash is assumed to earn 0%,
+  which flatters every Sharpe ratio a little (T-bills paid 0-5% over 1999-2025).
 """
 import numpy as np
 import pandas as pd
@@ -30,9 +30,13 @@ def annual_volatility(equity: pd.Series) -> float:
     return float(daily_returns(equity).std(ddof=1) * np.sqrt(TRADING_DAYS))
 
 
-def sharpe_ratio(equity: pd.Series) -> float:
-    """Mean daily return / its standard deviation, annualised; NaN if there is no risk."""
+def sharpe_ratio(equity: pd.Series, risk_free: pd.Series | None = None) -> float:
+    """Mean daily excess return / its standard deviation, annualised; NaN if there is no
+    risk. `risk_free` is the daily return on cash by date (bt.data.cash_returns), so the
+    ratio measures what the strategy earned *beyond* T-bills; None means a 0% rate."""
     r = daily_returns(equity)
+    if risk_free is not None:
+        r = r - risk_free.reindex(r.index).fillna(0.0)
     sd = r.std(ddof=1)
     return float(r.mean() / sd * np.sqrt(TRADING_DAYS)) if sd > 0 else float("nan")
 

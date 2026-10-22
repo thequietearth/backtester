@@ -25,6 +25,14 @@ def test_volatility_and_sharpe_on_alternating_returns():
     assert sharpe_ratio(eq) == pytest.approx(r.mean() / r.std(ddof=1) * np.sqrt(252))
 
 
+def test_sharpe_subtracts_the_risk_free_return_each_day():
+    eq = pd.Series(100 * np.cumprod([1, 1.01, 0.99, 1.01, 0.99, 1.01]), index=pd.bdate_range("2024-01-01", periods=6))
+    rf = pd.Series(0.0001, index=eq.index)  # about 2.5% a year
+    excess = eq.pct_change().dropna() - 0.0001
+    assert sharpe_ratio(eq, rf) == pytest.approx(excess.mean() / excess.std(ddof=1) * np.sqrt(252))
+    assert sharpe_ratio(eq, rf) < sharpe_ratio(eq)  # a positive risk-free rate lowers Sharpe
+
+
 def test_flat_curve_has_zero_volatility_and_no_sharpe():
     eq = pd.Series(1.0, index=pd.bdate_range("2024-01-01", periods=5))
     assert annual_volatility(eq) == 0.0
