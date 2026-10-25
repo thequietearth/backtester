@@ -13,6 +13,7 @@ import re
 import time
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import requests
 from dotenv import load_dotenv
@@ -305,3 +306,125 @@ def apply_overrides(spells: pd.DataFrame, overrides: pd.DataFrame | None) -> pd.
                 new_rows.append({**r, "start": hi})
         rows = new_rows
     return pd.DataFrame(rows).sort_values(["ticker", "start"]).reset_index(drop=True)
+
+
+# --- Renames: the same company under a new ticker -------------------------------------
+# When a member is renamed (FB -> META), the membership data shows one ticker leaving and
+# another joining on the same day. EODHD keeps the company's whole history under the new
+# ticker (META from 2012) and a stub under the old one that stops at the rename (FB_old).
+# The mapper rightly picks the stub for the old spell (its data ends when the spell does),
+# but anyone holding it across the rename would see "data ended" for a company that
+# carried on. follow_renames maps the old spell to the new code when the evidence says
+# it's the same security.
+
+RENAME_DAYS = 7               # the new ticker joins within a week of the old one leaving
+STUB_DAYS = (15, 30)          # the old code stops at most 15 days before to 30 days after that
+RETURN_MATCH = 0.005          # daily returns "the same" within half a percentage point...
+MATCH_SHARE = 0.98            # ...on at least 98% of the old code's days,
+LASTING_GAP = np.log(1.05)    # with no lasting jump of 5% or more in the gap between the codes,
+RENAME_CHECK_DAYS = 10        # and the same cumulative return (within RETURN_MATCH) over the last 10 days
+SAME_TRADED = 0.01            # on the old code's last day, both traded at the same price (1%)
+RENAME_JUMP = np.log(1.15)    # a bigger move across the rename: e.g. a special dividend left unadjusted
+
+
+def _series(eod: pd.DataFrame | None, column: str = "adjusted_close") -> pd.Series:
+    if eod is None or eod.empty:
+        return pd.Series(dtype=float)
+    return eod.dropna(subset=[column]).set_index("date")[column].sort_index()
+
+
+def _rename_target(spell: dict, rows: list[dict], eod_of) -> tuple | None:
+    """(new code, new ticker, cut, stop) if `spell` is the old side of a rename, else None.
+    The old spell uses the new code over [cut, stop)."""
+    code, end = spell["code"], spell["end"]
+    if not isinstance(code, str) or pd.isna(end) or spell["status"] == "manual":
+        return None
+    old = _series(eod_of(code))
+    if old.empty or not (end - pd.Timedelta(days=STUB_DAYS[0]) <= old.index.max()
+                         <= end + pd.Timedelta(days=STUB_DAYS[1])):
+        return None  # the old code doesn't stop at the rename: nothing breaks
+    first_old, last_old = old.index.min(), old.index.max()
+    lo = spell["start"] - pd.DateOffset(months=13)  # the first decision's 12-month window, and some
+    successors = sorted((t for t in rows if t["ticker"] != spell["ticker"] and isinstance(t["code"], str)
+                         and t["code"] != code and abs(t["start"] - end) <= pd.Timedelta(days=RENAME_DAYS)),
+                        key=lambda t: abs(t["start"] - end))
+    for t in successors:
+        new = _series(eod_of(t["code"]))
+        after = new[new.index > last_old]
+        if after.empty or last_old not in new.index:
+            continue
+        # Same security: the same daily returns wherever the old code traded (from a year
+        # before the spell), at any price level (adjustments differ by later dividends).
+        o = old[old.index >= lo]
+        common = o.index.intersection(new.index)
+        if len(o) < 20 or len(common) < MATCH_SHARE * len(o):
+            continue
+        diff = (np.log(o[common]).diff() - np.log(new[common]).diff()).dropna().abs()
+        if (diff < RETURN_MATCH).mean() < MATCH_SHARE:
+            continue
+        # A corporate action that one code handles differently makes the gap between them
+        # jump and stay (DowDuPont's reverse split and Corteva spin-off, three days before it
+        # became DuPont: -17% under one code, +18% under the other). A one-day glitch that
+        # reverses doesn't, nor does the slow drift from slightly different dividend data.
+        # So: the gap's median over the 5 days from any date may not move by 5% from the 5
+        # days before; and over the last 10 days the cumulative returns must agree.
+        gap = np.log(new[common]) - np.log(o[common])
+        gap_before = gap.rolling(5, min_periods=1).median().shift(1)
+        gap_from = gap[::-1].rolling(5, min_periods=1).median()[::-1]
+        if (gap_from - gap_before).abs().max() >= LASTING_GAP:
+            continue
+        k = min(RENAME_CHECK_DAYS, len(gap) - 1)
+        if abs(gap.iloc[-1] - gap.iloc[-1 - k]) >= RETURN_MATCH:
+            continue
+        # A plain rename: on the old code's last day both codes traded at the same price (a
+        # spin-off or reverse split at the rename rescales the new code's history), and the
+        # price carries on without a jump.
+        traded_old, traded_new = _series(eod_of(code), "close"), _series(eod_of(t["code"]), "close")
+        if last_old not in traded_new.index or last_old not in traded_old.index:
+            continue
+        if abs(traded_new[last_old] / traded_old[last_old] - 1) > SAME_TRADED:
+            continue
+        if abs(np.log(after.iloc[0] / new[last_old])) > RENAME_JUMP:
+            continue
+        # The new code may have earlier prices the old one lacks, which may be another
+        # company's. Then only dates whose 12-month window lies within the old code's own
+        # history (13 months after it starts) use the new code.
+        early = new[(new.index >= lo) & (new.index < first_old - pd.Timedelta(days=5))]
+        cut = spell["start"] if early.empty else max(spell["start"], first_old + pd.DateOffset(months=13))
+        stop = min(end, t["start"])
+        if cut < stop:
+            return t["code"], t["ticker"], cut, stop
+    return None
+
+
+def follow_renames(spells: pd.DataFrame, eod_of) -> pd.DataFrame:
+    """Map the old side of each rename to the code that carries on (see above).
+
+    `spells` is the automatic security map (ticker, start, end, code, status, flags, ...);
+    `eod_of(code)` returns that code's EODHD prices (date, adjusted_close, ...) or None.
+    The remapped part is flagged "renamed"; where the new code's history can't be trusted
+    early on, the spell is split and its first part keeps the old code. Hand-mapped spells
+    (status "manual", from data/ticker_map.csv) are left alone.
+
+    Only plain renames are followed. A corporate action on the rename day - a spin-off
+    (Arconic -> Howmet), a special dividend (Kraft -> Kraft Heinz), a reverse split -
+    either rescales the new code's history or shows up as a jump, and those spells keep
+    the old code: sold at its last price and flagged, as before.
+    """
+    rows = [dict(r) for _, r in spells.iterrows()]
+    out = []
+    for r in rows:
+        hit = _rename_target(r, rows, eod_of)
+        if hit is None:
+            out.append(r)
+            continue
+        code, ticker, cut, stop = hit
+        before = r["flags"] if isinstance(r["flags"], str) else ""
+        flags = ",".join(f for f in [*before.split(","), "renamed"] if f)
+        if r["start"] < cut:
+            out.append({**r, "end": cut})
+        out.append({**r, "start": cut, "end": stop, "code": code, "flags": flags,
+                    "note": f"renamed {ticker}: the same prices continue under {code}"})
+        if stop < r["end"]:
+            out.append({**r, "start": stop})
+    return pd.DataFrame(out).sort_values(["ticker", "start"]).reset_index(drop=True)

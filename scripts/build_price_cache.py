@@ -21,7 +21,7 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from bt.data import (apply_overrides, apply_price_exclusions, assess_candidate, cache_file,  # noqa: E402
-                     candidate_codes, choose_security, index_codes)
+                     candidate_codes, choose_security, follow_renames, index_codes)
 from bt.universe import load_constituents, membership_spells  # noqa: E402
 
 EODHD = ROOT / "data" / "raw" / "eodhd"
@@ -91,10 +91,13 @@ def main():
                      "data_first": a.get("first"), "data_last": a.get("last"),
                      "candidates": "; ".join(f"{c} ({names.get(c, '')}, cov {v['coverage']:.2f})"
                                              for c, v in assessed.items())})
-    smap = apply_overrides(pd.DataFrame(rows), overrides)
-    # Re-measure hand-mapped rows against their (possibly split) date range, so the
-    # evidence columns describe the code actually used.
-    for i, r in smap[(smap.status == "manual") & smap.code.notna()].iterrows():
+    # Hand fixes first; then renamed members keep the code that carries on (bt.data.follow_renames
+    # leaves hand-mapped spells alone).
+    smap = follow_renames(apply_overrides(pd.DataFrame(rows), overrides), load_eod)
+    # Re-measure hand-mapped and renamed rows against their (possibly split) date range, so
+    # the evidence columns describe the code actually used.
+    renamed = smap["flags"].fillna("").str.split(",").apply(lambda f: "renamed" in f)
+    for i, r in smap[((smap.status == "manual") | renamed) & smap.code.notna()].iterrows():
         p = load_eod(r.code)
         a = assess_candidate(r.start, r.end, p, calendar, as_of) if p is not None and len(p) else {}
         smap.loc[i, ["name", "coverage", "dollar_volume_m", "data_first", "data_last"]] = [
@@ -147,7 +150,8 @@ def main():
 
     # Pass test 2: the known traps. Each row: (ticker, a date inside the spell, acceptable codes).
     # None in the acceptable set means "missing or flagged for review" is the right outcome.
-    traps = [("WEN", "1997-12-31", {"WEN_old"}), ("EP", "2003-12-31", {"EP_old"}),
+    # WEN: both EODHD codes hold Triarc's history, so Wendy's International must come out missing.
+    traps = [("WEN", "1997-12-31", {None}), ("EP", "2003-12-31", {"EP_old"}),
              ("EP", "2009-12-31", {"EP_old"}), ("FDO", "2008-12-31", {"FDO"}),
              ("AN", "1997-12-31", {None}), ("SNT", "1996-12-31", {None})]
     print("\ntraps:")

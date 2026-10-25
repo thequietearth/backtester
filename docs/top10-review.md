@@ -1,18 +1,20 @@
 # Top-10 pick review
 
 **Result:** all 270 point-in-time top-10 picks for 1999–2025 were checked, 27 years × 10.
-- **192 confirmed automatically:** formation-year and holding-year returns match Yahoo's dividend-adjusted prices within about 5%.
-- **78 checked by hand:** Yahoo has no prices for them (mostly delisted companies). Each formation-year return was compared with the company's reported history.
+- **196 confirmed automatically:** formation-year and holding-year returns match Yahoo's dividend-adjusted prices within about 5%.
+- **74 checked by hand:** Yahoo has no prices for them (mostly delisted companies). Each formation-year return was compared with the company's reported history.
 
 The review found **five broken price histories and one wrong label**. All are now fixed or excluded, and none was fixed by editing a price.
+
+**Updated in M5b (2026-10-26):** Ball Corp's own clean history replaced EODHD's broken `BLL` series, which puts Ball into 2003's top 10 at #6 (it matches Yahoo) and moves Sigma-Aldrich out. Renamed companies now use the code that carries on, so PerkinElmer (`RVTY`), Jacobs (`J`) and Facebook (`META`) are checked against Yahoo instead of by hand. Last year's top 10 returns 9.31% a year instead of 9.33%.
 
 PLAN.md requires 1999–2012. Later years were cheap to check automatically, so they're included.
 
 Reproduce: `python scripts/run_v1.py`, then `python scripts/review_top10.py` (writes `data/cache/top10_review.csv`).
 
 ## Method
-1. **Stocks that still trade** (192 picks): EODHD's returns are compared with Yahoo's for the same years. A difference above 5% (in log terms) goes to review.
-2. **Delisted stocks** (78 picks):
+1. **Stocks that still trade** (196 picks): EODHD's returns are compared with Yahoo's for the same years. A difference above 5% (in log terms) goes to review.
+2. **Delisted stocks** (74 picks):
    - EODHD's adjusted return is shown next to the traded-price return (on the same split basis) and the data range.
    - Each formation-year return was compared with the company's reported price history.
    - The holding-year return was checked against what happened to the company (takeover, bankruptcy and so on).
@@ -26,6 +28,7 @@ Reproduce: `python scripts/run_v1.py`, then `python scripts/review_top10.py` (wr
 | Coastal (CGP), 2001 #7 | Coastal was bought by El Paso on 29 Jan 2001, but EODHD's `CGP` prices restart later as another instrument, running to 2022. The engine "held" the impostor | Prices after 29 Jan 2001 excluded. The engine also changed (below) |
 | Hercules (HPC), 2007 | Bought by Ashland on 13 Nov 2008. After that the price is frozen at $30.02 with no volume, then becomes another instrument | Prices after the takeover excluded |
 | Johnson Controls (JCI), 2017 #9 | 2016 was the Tyco merger and the Adient spin-off. EODHD's adjusted return (+64%) disagrees with its traded price (+38%) and Yahoo (+42%) | Prices for Sep–Dec 2016 excluded, so it isn't ranked for 2017 |
+| Ball (`BLL`), 2003 | EODHD's `BLL` series applies Ball's 2002 split twice: the adjusted price doubles on the split day while the traded price doesn't move. The price checks set Ball aside, so it was never ranked for 2003, though its real 2002 return (+46%) made the top 10. Found in M5b, when momentum held Ball across the split | Remapped to `BALL`, the same company's history with clean adjustments (`data/ticker_map.csv`) |
 | Mallinckrodt (`MNK_old`), 2015 #5 | EODHD's symbol list labels the code as a municipal bond fund | None needed: the prices start at Mallinckrodt's June 2013 spin-off and match its returns (+89% in 2014, −25% in 2015) |
 
 **Engine change prompted by Coastal:** a held stock with no price for more than 10 trading days in a row is now sold at its last price, flagged "data ended, real outcome unknown". Before, the engine checked whether prices existed *later* to tell a gap from an ending. That was a small lookahead, and it let a series that restarts as another instrument be followed. The no-lookahead test now also covers prices vanishing.
@@ -85,7 +88,7 @@ Formation-year returns are the ranking (last year's return). Holding returns run
 | 9 | CDNS | Cadence Design Systems Inc | +97% | +35% | matches Yahoo |
 | 10 | NOW | ServiceNow Inc | +95% | +20% | matches Yahoo |
 
-## Every pick, 1999�2025
+## Every pick, 1999–2025
 
 | Year bought | Rank | Ticker | EODHD code | Company | Return the year before | Return while held | Check |
 |---|---|---|---|---|---|---|---|
@@ -114,7 +117,7 @@ Formation-year returns are the ranking (last year's return). Holding returns run
 | 2001 | 3 | EHC | `EHC` | Encompass Health Corp | +203% | -3% | matches Yahoo |
 | 2001 | 4 | CB | `CB` | Chubb Ltd | +159% | -3% | matches Yahoo |
 | 2001 | 5 | KMI | `KMI1` | Kinder Morgan Inc | +159% | +14% | hand-checked: consistent with company history |
-| 2001 | 6 | PKI | `PKI` | PerkinElmer Inc | +154% | -27% | hand-checked: consistent with company history |
+| 2001 | 6 | PKI | `RVTY` | PerkinElmer Inc | +154% | -27% | matches Yahoo |
 | 2001 | 7 | CGP | `CGP` | Coastal Corp | +150% | -8% | hand-checked; prices after the 29 Jan 2001 takeover by El Paso are excluded (a different instrument), so the holding exits then |
 | 2001 | 8 | UNH | `UNH` | UnitedHealth Group Incorporated | +131% | +20% | matches Yahoo |
 | 2001 | 9 | FRX | `FRX_old` | Forest Laboratories Inc | +116% | +25% | hand-checked: consistent with company history |
@@ -134,11 +137,11 @@ Formation-year returns are the ranking (last year's return). Holding returns run
 | 2003 | 3 | NEM | `NEM` | Newmont Goldcorp Corp | +53% | +65% | matches Yahoo |
 | 2003 | 4 | HAL | `HAL` | Halliburton Company | +47% | +39% | matches Yahoo |
 | 2003 | 5 | APOL | `APOL` | Apollo Education Group Inc | +47% | +53% | hand-checked: consistent with company history |
-| 2003 | 6 | ZBH | `ZBH` | Zimmer Biomet Holdings Inc | +36% | +74% | matches Yahoo |
-| 2003 | 7 | BIG | `BIG` | Big Lots Inc | +27% | +2% | hand-checked: consistent with company history |
-| 2003 | 8 | ANTM | `ANTM` | Anthem Inc | +27% | +20% | hand-checked: consistent with company history |
-| 2003 | 9 | PFG | `PFG` | Principal Financial Group Inc | +27% | +9% | matches Yahoo |
-| 2003 | 10 | SIAL | `SIAL` | Sigma-Aldrich Corp | +25% | +20% | hand-checked: consistent with company history |
+| 2003 | 6 | BLL | `BALL` | Ball Corp | +46% | +12% | matches Yahoo |
+| 2003 | 7 | ZBH | `ZBH` | Zimmer Biomet Holdings Inc | +36% | +74% | matches Yahoo |
+| 2003 | 8 | BIG | `BIG` | Big Lots Inc | +27% | +2% | hand-checked: consistent with company history |
+| 2003 | 9 | ANTM | `ANTM` | Anthem Inc | +27% | +20% | hand-checked: consistent with company history |
+| 2003 | 10 | PFG | `PFG` | Principal Financial Group Inc | +27% | +9% | matches Yahoo |
 | 2004 | 1 | AV | `AV_old1` | Avaya Inc | +428% | +32% | hand-checked: consistent with company history |
 | 2004 | 2 | PMCS | `PMCS` | PMC-Sierra Inc | +262% | -45% | hand-checked: consistent with company history |
 | 2004 | 3 | NOVL | `NOVL` | Novell Inc | +215% | -38% | hand-checked: consistent with company history |
@@ -181,7 +184,7 @@ Formation-year returns are the ranking (last year's return). Holding returns run
 | 2007 | 10 | HPC | `HPC` | HERCULES INC | +71% | -1% | hand-checked: consistent with company history |
 | 2008 | 1 | NOV | `NOV` | NOV Inc. | +140% | -64% | matches Yahoo |
 | 2008 | 2 | AMZN | `AMZN` | Amazon.com Inc | +135% | -44% | matches Yahoo |
-| 2008 | 3 | JEC | `JEC` | Jacobs Engineering Group Inc | +135% | -48% | hand-checked: consistent with company history |
+| 2008 | 3 | JEC | `J` | Jacobs Engineering Group Inc | +135% | -48% | matches Yahoo |
 | 2008 | 4 | AAPL | `AAPL` | Apple Inc. | +133% | -53% | matches Yahoo |
 | 2008 | 5 | SUNEQ | `WFR_old` | Sunedison Inc | +126% | -82% | hand-checked: consistent with company history |
 | 2008 | 6 | GME | `GME` | GameStop Corp. | +125% | -62% | matches Yahoo |
@@ -248,7 +251,7 @@ Formation-year returns are the ranking (last year's return). Holding returns run
 | 2014 | 7 | CELG | `CELG` | Celgene Corporation | +115% | +32% | hand-checked: consistent with company history |
 | 2014 | 8 | BSX | `BSX` | Boston Scientific Corp | +110% | +11% | matches Yahoo |
 | 2014 | 9 | GNW | `GNW` | Genworth Financial Inc | +107% | -46% | matches Yahoo |
-| 2014 | 10 | FB | `FB_old` | Facebook Inc | +105% | +43% | hand-checked: consistent with company history |
+| 2014 | 10 | FB | `META` | Facebook Inc | +105% | +43% | matches Yahoo |
 | 2015 | 1 | LUV | `LUV` | Southwest Airlines Company | +126% | -1% | matches Yahoo |
 | 2015 | 2 | EA | `EA` | Electronic Arts Inc | +105% | +41% | hand-checked: consistent with company history |
 | 2015 | 3 | EW | `EW` | Edwards Lifesciences Corp | +94% | +23% | matches Yahoo |
@@ -298,7 +301,7 @@ Formation-year returns are the ranking (last year's return). Holding returns run
 | 2019 | 7 | KEYS | `KEYS` | Keysight Technologies Inc | +49% | +70% | matches Yahoo |
 | 2019 | 8 | RHT | `RHT` | Red Hat Inc | +46% | +8% | hand-checked: consistent with company history |
 | 2019 | 9 | HCA | `HCA` | HCA Healthcare, Inc. | +43% | +23% | matches Yahoo |
-| 2019 | 10 | ORLY | `ORLY` | O�Reilly Automotive Inc | +43% | +28% | matches Yahoo |
+| 2019 | 10 | ORLY | `ORLY` | O'Reilly Automotive Inc | +43% | +28% | matches Yahoo |
 | 2020 | 1 | AMD | `AMD` | Advanced Micro Devices Inc | +148% | +88% | matches Yahoo |
 | 2020 | 2 | LRCX | `LRCX` | Lam Research Corp | +119% | +63% | matches Yahoo |
 | 2020 | 3 | KLAC | `KLAC` | KLA Corporation | +104% | +45% | matches Yahoo |
@@ -357,5 +360,5 @@ Formation-year returns are the ranking (last year's return). Holding returns run
 | 2025 | 6 | TPL | `TPL` | Texas Pacific Land Corporation | +115% | -24% | matches Yahoo |
 | 2025 | 7 | AVGO | `AVGO` | Broadcom Inc | +110% | +51% | matches Yahoo |
 | 2025 | 8 | TRGP | `TRGP` | Targa Resources Inc | +110% | +4% | matches Yahoo |
-| 2025 | 9 | HWM | `HWM` | Howmet Aerospace�Inc | +103% | +92% | matches Yahoo |
+| 2025 | 9 | HWM | `HWM` | Howmet Aerospace Inc | +103% | +92% | matches Yahoo |
 | 2025 | 10 | CEG | `CEG` | Constellation Energy Corp | +93% | +52% | matches Yahoo |

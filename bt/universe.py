@@ -86,3 +86,27 @@ def formation_dates(calendar, years) -> pd.Series:
             raise ValueError(f"calendar has no trading days in {y - 1}")
         out[y] = prev.max()
     return pd.Series(out, name="formation_date")
+
+
+def month_ends(calendar, start=None, end=None) -> list[pd.Timestamp]:
+    """The last trading day of each month, within [start, end] when given."""
+    cal = pd.DatetimeIndex(calendar)
+    ends = cal.to_series().groupby(cal.to_period("M")).max()
+    if start is not None:
+        ends = ends[ends >= pd.Timestamp(start)]
+    if end is not None:
+        ends = ends[ends <= pd.Timestamp(end)]
+    return [pd.Timestamp(d) for d in ends]
+
+
+def month_end(calendar, date, months_back: int = 0) -> pd.Timestamp:
+    """The last trading day of the month `months_back` months before `date`'s month
+    (0: `date`'s own month, up to `date`). Monthly strategies measure returns between
+    month-ends: for a decision at the end of December, `months_back=12` is the end of the
+    previous December."""
+    cal = pd.DatetimeIndex(calendar)
+    date = pd.Timestamp(date)
+    days = cal[(cal.to_period("M") == date.to_period("M") - months_back) & (cal <= date)]
+    if days.empty:
+        raise ValueError(f"calendar has no trading days {months_back} months before {date.date()}")
+    return days.max()

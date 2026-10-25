@@ -121,7 +121,7 @@ EODHD lists 50,964 active and 60,433 delisted US symbols (33,186 of the delisted
 
 | Trap | Real company | EODHD |
 |---|---|---|
-| 1998 `WEN` | Wendy's International | ✅ `WEN_old`, kept separate from today's `WEN` |
+| 1998 `WEN` | Wendy's International | ❌ `WEN_old` is labelled Wendy's International but holds Triarc's history, like today's `WEN` (found in M5b; see below) |
 | 2004, 2010 `EP` | El Paso Corp | ✅ `EP_old`, kept separate from Empire Petroleum's `EP` |
 | 2009 `FDO` | Family Dollar | ✅ `FDO` in the delisted list |
 | 1996 `AN` | Amoco (gone 1998) | ❌ not listed |
@@ -149,7 +149,7 @@ EODHD lists 50,964 active and 60,433 delisted US symbols (33,186 of the delisted
 - **Download:** `scripts/download_eodhd.py --scope v1` made 4,524 calls with 0 errors. That's prices, dividends and splits for 1,508 codes: every candidate for every member, plus SPY and RSP.
 - **Mapping:** `scripts/build_price_cache.py` mapped the 1,262 membership spells as 854 automatic, 322 flagged for review and 86 missing. Of the missing spells, 52 ended before 1999 and 34 overlap 1999 or later.
 
-**EODHD truncates old histories.** Of the delisted codes downloaded, 362 have prices starting exactly on 1997-12-31, another 36 on 1999-01-04 and 27 on 2003-09-10. Companies that still trade go back to 1994. For example, `WEN_old` (Wendy's International) starts at 1997-12-31. So for 1996–1998, many members can't be ranked, because ranking them needs prices from before 1998.
+**EODHD truncates old histories.** Of the delisted codes downloaded, 362 have prices starting exactly on 1997-12-31, another 36 on 1999-01-04 and 27 on 2003-09-10. Companies that still trade go back to 1994. For example, `WEN_old` starts at 1997-12-31. So for 1996–1998, many members can't be ranked, because ranking them needs prices from before 1998.
 
 **Pass test 1, coverage** (`bt/coverage.py`). Final figures, after hand mapping and the price checks in pass test 4:
 
@@ -163,8 +163,8 @@ Before hand mapping and price checks, 2005–2009 measured about 96%. The strict
 
 Why members are missing in 1996–98: 623 member-years without formation data (the 1997 truncation) and 158 with no EODHD security at all (companies gone before 1999, such as Amoco, Sonat and NYNEX).
 
-**Pass test 2, traps:** all six pass.
-- `WEN` 1997 → `WEN_old`, flagged partial (the truncated history).
+**Pass test 2, traps:** all six pass, but `WEN` passed for the wrong reason until M5b.
+- `WEN` 1997 → no usable prices. M1 mapped it to `WEN_old`, which EODHD labels Wendy's International. M5b found that `WEN_old` has the same closes and volumes as today's `WEN`, i.e. Triarc's history: about 50,000 shares a day against Wendy's million or so, and Triarc's 2003 share distribution as a −68% day. No EODHD code has Wendy's own prices, so it counts as missing. The trap had checked the code's name, not its prices.
 - `EP` 2003 and 2009 → `EP_old`.
 - `FDO` 2008 → `FDO`.
 - `AN` 1997 → flagged for review, because the ticker left the index and came back.
@@ -186,10 +186,11 @@ Left alone, these produce "winners" like +17,292% (Cooper, 2006) and +49,349% (D
 3. **Adjustment glitch:** the adjusted price moves more than 25% in a day while the traded price moves less than 10% → "suspect prices". This catches double-counted splits (Safeway, Gateway) and corrupt factors (Ambac). It compares against the true traded price, because EODHD's traded price is sometimes already split-adjusted.
 4. **Unexplained gap:** over the year, the adjusted return and the traded return (on the same split basis) differ by more than 30% → "suspect prices". Dividends rarely explain more than about 10%. This caught Williams 2003 and Deluxe 2001, probably mishandled spin-offs.
 5. **Small:** trading value under $0.5m a day, and not confirmed by hand → "suspect identity". Below that line nearly every case was broken data or another company.
+6. **Frozen** (added in M5b): the same close more than 10 days in a row → "suspect prices". Genuine members never repeated a close more than 5 days in a row in 1998–2024, even with 1999–2001's 1/16-dollar price steps. Broken series repeat one for weeks (Hercules, 57 days in 2007) or a whole year (Weatherford at exactly $1,000,000 in 2006). A frozen price has zero volatility, so a low-volatility ranking would pick it first.
 
 **Calibration:** genuine winners that split during their big year stay "ok": Qualcomm 1999, Dell 1998, Nvidia 2001, Tesla 2020, Apple 2004 and XL 2009.
 
-Suspect members aren't ranked, and they show up in the coverage gaps instead. Jumps during a holding year are only flagged, because real crashes (Lehman −94% in a day) must stay in the results. In 1999–2025 there are 214 suspect member-years.
+Suspect members aren't ranked, and they show up in the coverage gaps instead. Jumps during a holding year are only flagged, because real crashes (Lehman −94% in a day) must stay in the results. In 1999–2025 there are 209 suspect member-years: 111 with suspect prices and 98 with suspect identity.
 
 **Hand fixes from this review** (`data/ticker_map.csv`):
 - `BBBY` → `BBBYQ`, the real Bed Bath & Beyond. EODHD's `BBBY` and `BBBY_old` are both Overstock's history.
@@ -204,6 +205,26 @@ Suspect members aren't ranked, and they show up in the coverage gaps instead. Ju
 **Top pick per year after all checks** (pass test for top-1): every one is a genuine annual winner. Dell, Qualcomm, Reebok, Nvidia, Providian, Avaya, Autodesk, Valero, Allegheny Technologies, NOV, Family Dollar, XL, Netflix, Cabot Oil & Gas, PulteGroup, Netflix, Southwest, Netflix, Nvidia, NRG, AMD, AMD, Tesla, Devon, Occidental, Nvidia and Palantir, for 1999–2025 in order.
 
 **Top-10 picks (M3):** all 270 for 1999–2025 were checked; see `docs/top10-review.md`. That review found five more broken histories that the automatic checks missed: Williams, L Brands, Coastal, Hercules and Johnson Controls. They are handled in `data/price_exclusions.csv` and `data/ticker_map.csv`. It also prompted an engine change: a held stock is sold after more than 10 trading days without a price, without looking ahead.
+
+**Renames (M5b).** When a member is renamed (FB → META), EODHD keeps the company's whole history under the new ticker and a stub under the old one that stops at the rename. The mapper rightly picks the stub for the old spell, but a strategy holding it across the rename saw "data ended" for a company that carried on. Holding about 50 stocks and trading monthly, momentum ran into five such cases. `bt.data.follow_renames` now maps the old spell to the new code, but only for a plain rename, where all of these hold:
+- the new ticker joins within a week of the old one leaving, and the old code stops then;
+- the two codes' daily returns agree on 98% of days, with no lasting jump of 5% or more in the gap between them, and the same cumulative return over the last 10 days;
+- on the old code's last day both traded at the same price, and the price carries on without a jump of 15% or more;
+- the new code's earlier prices, which may belong to another company, are never used: a remapped date's 12-month window stays within the old code's own history.
+
+It follows 19 renames, among them Facebook → Meta, AmerisourceBergen → Cencora, Discovery → Warner Bros. Discovery and Mylan → Viatris. It refuses two kinds:
+- **A corporate action on the rename day.** Examples: Kraft Heinz (a $16.50 special dividend missing from the new code's prices: a fake −19%), the Arconic/Howmet and United Technologies/RTX spin-offs, and DowDuPont's reverse split with the Corteva spin-off. These keep the old code, sold at its last price and flagged, which is close to what holders got.
+- **Two series that disagree.** One of them is broken: Anthem/Elevance, BB&T/Truist, Ball, Marsh & McLennan and Willis Towers Watson each have a split or adjustment applied wrongly in one code. The existing price checks keep the broken windows out of the rankings.
+
+**Held positions (M5b).** The price checks keep broken series out of the ranking, but a stock bought before its data breaks is still held. `scripts/audit_holdings.py` lists every day a strategy held a stock while its adjusted price moved implausibly; verdicts are in `docs/sanity-check.md`. It found:
+- **Ball:** EODHD's `BLL` applies the 2002 and 2004 splits twice → remapped to `BALL`, which has clean adjustments. This also put Ball into 2003's top 10.
+- **St. Jude Medical** (2002) and **US Steel** (2005): a split counted twice, and a split that never happened → three weeks around each excluded.
+- **Golden West** (from March 2003) becomes a different instrument → excluded from then on.
+- **Transocean** (merger day, 2007) jumps +30% → three weeks excluded.
+- **Wendy's International** → no usable prices (above).
+- Two bad final prints: Mylan's last two days at $0.079 and DowDuPont's last at $30.52 → excluded.
+
+None of these was fixed by editing a price.
 
 **Pass test 3, dividends:** passes (`scripts/validate_prices.py`). For 20 stocks that still trade, each year's adjusted return beats the raw-price return by about the dividend yield (KO +3.1% a year, XOM +3.0%, SPY +2.0%). Against Yahoo's total-return prices, the median yearly difference is 0.0. Only 4 of 611 full years differ by more than 0.5 points: PFE 1995, JPM 1995 and 1996, and KO 2001 (by 0.6).
 

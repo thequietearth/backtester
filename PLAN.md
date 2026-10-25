@@ -96,9 +96,10 @@ Build in this order, each step with its own plan and done-criteria.
   - RSI(2) mean reversion
 - Comparison view: pick any 2–4 strategies side by side
 
-**M5b: price-based strategies on the point-in-time S&P 500** (uses data already downloaded)
+**M5b: price-based strategies on the point-in-time S&P 500** ✅ (done 2026-10-26)
 - Academic momentum: rank on the last 12 months excluding the most recent month, hold the top 10%, rebalance monthly. The research version of v1's "last year's winners"
 - Low volatility: hold the 50 least volatile stocks of the past year
+- Built with them: month-end universes with the coverage report's checks (`bt.coverage.decision_universe`, which must agree with the report on every year-end), the frozen-price check, rename following (`bt.data.follow_renames`), the SPLV replica and momentum-ETF comparison (`scripts/sanity_factor_etfs.py`), and the holdings audit (`scripts/audit_holdings.py`), whose findings fixed data that also changed one v1 pick (Ball, 2003)
 
 **M5c: contrarian**
 - Last year's worst N. **Caution from M2's sanity check:** the price-sanity checks set aside real crashes along with broken data, which is exactly what this strategy looks for. Real crashes and data errors need telling apart (by hand, or with a second source) before its results can be trusted.
@@ -133,6 +134,12 @@ Build in this order, each step with its own plan and done-criteria.
 | Risk-free rate and cash | 3-month T-bill rate (FRED DTB3, committed), accrued daily at the previous day's rate. Cash earns it, and Sharpe is measured beyond it. The app can switch to 0% | Decided (M5a). At 0%, timing rules lose 0.5–1.8 points a year |
 | Charts with several strategies | Small multiples: one chart per strategy against SPY, all on one scale. More than three lines in one chart can't be told apart reliably (palette validator) | Decided (M5a) |
 | Timing-rule execution | Decide at the close, trade at the next close (no lookahead). Published RSI(2) results trade at the signal day's close, which flatters them | Decided (M5a) |
+| Momentum (M5b) | Each month-end, rank members by return from the month-end 12 months back to the one 1 month back; hold the top 10% (rounded up), equal weight; trade at the next close | Decided (M5b) |
+| Low volatility (M5b) | Each quarter-end (Dec, Mar, Jun, Sep), hold the 50 members with the lowest standard deviation of daily log returns over the past 12 months, equal weight. Inverse-volatility weighting only in the SPLV replica | Decided (M5b) |
+| Universe for monthly and quarterly decisions | Members on the decision date whose prices pass the coverage report's checks over the 12 months ending on it (the same checks as the yearly report) | Decided (M5b) |
+| Frozen prices | The same close more than 10 days in a row in the formation window → "suspect prices". Genuine members never exceeded 5 in 1998–2024 | Decided (M5b) |
+| Renames | A renamed member keeps the code that carries on only for a plain rename the prices prove (`bt.data.follow_renames`); with a corporate action on the rename day, or disagreeing series, the old code is sold at its last price and flagged | Decided (M5b) |
+| Held positions | `scripts/audit_holdings.py` lists every held day with an adjustment glitch or a one-day doubling/halving; each gets a verdict in `docs/sanity-check.md`. Data errors are fixed by mapping or excluding dates; real crashes stay | Decided (M5b) |
 | Publishing | Local app; public code and a write-up | Decided |
 | Repo visibility | Public code, never any price data | Decided |
 | Code licence | MIT | Decided |
@@ -147,4 +154,6 @@ Build in this order, each step with its own plan and done-criteria.
 - Multi-asset ETF strategies
 - Fundamental strategies: low P/E, high free-cash-flow yield, quality (return on capital), Greenblatt's "Magic Formula". Needs point-in-time fundamentals: SEC EDGAR XBRL data is free, carries each figure's filing date and covers delisted companies, from about 2009. Use a figure only after its filing date, as originally reported. A data project on the scale of M1; fits the trusted 2010–2025 years
 - Dividend-yield strategy (trailing 12-month dividends ÷ price); the dividend data is already downloaded
+- Settings for momentum and low volatility (share held, N, rebalancing frequency, inverse-volatility weighting)
+- Add the adjusted-vs-traded drift check over each held stint to `scripts/audit_holdings.py`. It caught Transocean's merger day as a one-off, but needs a per-year threshold, because years of dividends legitimately open big gaps
 - Norgate Platinum ($630/year: prices from 1990, delisted stocks, daily index membership) if EODHD's early years turn out too thin

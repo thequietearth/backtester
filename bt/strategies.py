@@ -7,8 +7,18 @@ rebalance date to the codes that may be picked then (built in bt.coverage, from
 point-in-time membership and the price checks). A decision on date d may only use
 prices up to the close of d; the engine trades it at the next close.
 """
+import math
+
 import numpy as np
 import pandas as pd
+
+from bt.universe import month_end
+
+
+def _weights(rows: dict, rebalance_dates) -> pd.DataFrame:
+    """{date: {code: weight}} -> DataFrame[date x code], with an empty row (all cash) for a
+    date that picked nothing."""
+    return pd.DataFrame(rows).T.fillna(0.0).reindex(list(rebalance_dates)).fillna(0.0)
 
 
 def formation_returns(prices: pd.DataFrame, codes, date) -> pd.Series:
@@ -36,7 +46,73 @@ def top_n(prices: pd.DataFrame, universe: dict, rebalance_dates, n: int = 10) ->
     for d in rebalance_dates:
         picks = list(ranked(prices, universe.get(d, []), d).index[:n])
         rows[d] = {c: 1 / len(picks) for c in picks}
-    return pd.DataFrame(rows).T.fillna(0.0).reindex(list(rebalance_dates)).fillna(0.0)
+    return _weights(rows, rebalance_dates)
+
+
+# --- Monthly and quarterly stock-picking ---------------------------------------------------
+# Both decide at month-ends, among the members that pass the coverage report's checks over
+# the 12 months ending on the decision date (bt.coverage.decision_universe).
+
+def momentum_scores(prices: pd.DataFrame, codes, date, lookback: int = 12, skip: int = 1) -> pd.Series:
+    """Academic momentum ("12-1"): each code's return from the month-end `lookback` months
+    before `date` to the month-end `skip` months before it, best first (ties alphabetical).
+
+    Why skip the last month: over a single month, winners tend to fall back a little and
+    losers to bounce (short-term reversal, partly trading noise), which works against the
+    year-long trend. Research since Jegadeesh and Titman (1993) therefore ranks on months
+    t-12 to t-2. If a stock has no close on the end date itself, its last close before it is used.
+    """
+    start, end = month_end(prices.index, date, lookback), month_end(prices.index, date, skip)
+    codes = [c for c in codes if c in prices.columns]
+    window = prices.loc[start:end, codes]
+    r = (window.ffill().iloc[-1] / window.iloc[0] - 1).dropna()
+    return r[sorted(r.index, key=lambda c: (-r[c], c))]
+
+
+def momentum(prices: pd.DataFrame, universe: dict, rebalance_dates, lookback: int = 12, skip: int = 1,
+             fraction: float = 0.1) -> pd.DataFrame:
+    """Hold the top `fraction` of the universe by 12-1 month return (the top 10%, about 50
+    stocks of the S&P 500), equal weight, re-ranked on every rebalance date. The fraction
+    is rounded up, so at least one stock is held."""
+    rows = {}
+    for d in rebalance_dates:
+        scores = momentum_scores(prices, universe.get(d, []), d, lookback, skip)
+        n = max(1, math.ceil(round(fraction * len(scores), 9)))  # round(): 0.1 * 470 is 47.000...01
+        picks = list(scores.index[:n])
+        rows[d] = {c: 1 / len(picks) for c in picks}
+    return _weights(rows, rebalance_dates)
+
+
+def volatility_scores(prices: pd.DataFrame, codes, date, months: int = 12) -> pd.Series:
+    """Each code's volatility over the `months` months ending on `date`: the standard
+    deviation of its daily log returns, annualised by sqrt(252) (about 252 trading days a
+    year). Calmest first, ties alphabetical. A return across a missing day runs from the
+    last close before it."""
+    start = month_end(prices.index, date, months)
+    codes = [c for c in codes if c in prices.columns]
+    logp = np.log(prices.loc[start:date, codes])
+    daily = logp - logp.ffill().shift()  # NaN on days without a price
+    vol = (daily.std() * np.sqrt(252)).dropna()
+    return vol[sorted(vol.index, key=lambda c: (vol[c], c))]
+
+
+def low_volatility(prices: pd.DataFrame, universe: dict, rebalance_dates, n: int = 50, months: int = 12,
+                   weighting: str = "equal") -> pd.DataFrame:
+    """Hold the `n` members with the lowest volatility over the past year.
+
+    The "low-volatility anomaly": calmer stocks have historically earned about as much as
+    the market with less risk, against the textbook idea that more risk is paid more.
+    `weighting` is "equal" or "inverse volatility" (weight proportional to 1 / volatility,
+    as the S&P 500 Low Volatility Index does; used for the SPLV sanity check).
+    """
+    if weighting not in ("equal", "inverse volatility"):
+        raise ValueError(f"unknown weighting: {weighting}")
+    rows = {}
+    for d in rebalance_dates:
+        vol = volatility_scores(prices, universe.get(d, []), d, months).iloc[:n]
+        inverse = 1 / vol if weighting == "inverse volatility" else pd.Series(1.0, index=vol.index)
+        rows[d] = (inverse / inverse.sum()).to_dict()
+    return _weights(rows, rebalance_dates)
 
 
 def spy_buy_and_hold(prices: pd.DataFrame, universe: dict, rebalance_dates, code: str = "SPY") -> pd.DataFrame:

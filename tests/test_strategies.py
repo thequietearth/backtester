@@ -10,9 +10,9 @@ import pytest
 
 from bt.coverage import RANKABLE, coverage_by_year, rankable_universe
 from bt.engine import run_backtest
-from bt.strategies import (rsi, rsi2_positions, spy_buy_and_hold, spy_golden_cross, spy_rsi2, spy_trend,
-                           top_n)
-from bt.universe import members_on, naive_constituents, naive_security_map
+from bt.strategies import (low_volatility, momentum, momentum_scores, rsi, rsi2_positions, spy_buy_and_hold,
+                           spy_golden_cross, spy_rsi2, spy_trend, top_n, volatility_scores)
+from bt.universe import members_on, month_end, month_ends, naive_constituents, naive_security_map
 
 DAYS = pd.bdate_range("2019-12-02", "2021-01-29")
 F_START, F_DATE = pd.Timestamp("2019-12-31"), pd.Timestamp("2020-12-31")
@@ -20,9 +20,12 @@ GAIN = {"A": 1.5, "B": 1.2, "C": 1.8, "D": 1.8, "E": 3.0, "SPY": 1.1}
 
 
 def make_prices():
-    p = pd.DataFrame(100.0, index=DAYS, columns=list(GAIN))
+    # A 0.1% daily wiggle: real closes change almost every day (flat lines fail the
+    # frozen-price check). It cancels out over the formation period.
+    wiggle = 1 + 0.001 * (-1.0) ** np.arange(len(DAYS))
+    p = pd.DataFrame({c: 100.0 * wiggle for c in GAIN}, index=DAYS)
     for c, g in GAIN.items():
-        p.loc[p.index > F_START, c] = 100.0 * g  # jump right after the formation start, then flat
+        p.loc[p.index > F_START, c] *= g  # jump right after the formation start
     return p
 
 
@@ -159,3 +162,90 @@ def test_naive_universe_uses_todays_members_for_every_year():
     nmap = naive_security_map(smap, naive)
     assert sorted(nmap.ticker) == ["KEEP", "NEW"]
     assert (nmap.start <= pd.Timestamp("1990-01-01")).all() and nmap.end.isna().all()
+
+
+# --- Momentum and low volatility (decided at month-ends) ----------------------------
+
+MDAYS = pd.bdate_range("2019-11-01", "2021-02-26")
+D = pd.Timestamp("2020-12-31")  # window from the end of Dec 2019; momentum skips Dec 2020
+
+
+def test_month_end_is_the_last_trading_day_of_an_earlier_month():
+    assert month_end(MDAYS, D, 0) == D
+    assert month_end(MDAYS, D, 1) == pd.Timestamp("2020-11-30")
+    assert month_end(MDAYS, D, 12) == pd.Timestamp("2019-12-31")
+    assert month_end(MDAYS, pd.Timestamp("2020-06-30"), 1) == pd.Timestamp("2020-05-29")  # 31 May was a Sunday
+    assert month_ends(MDAYS, "2020-10-01", "2020-12-31") == [pd.Timestamp(d) for d in
+                                                            ("2020-10-30", "2020-11-30", "2020-12-31")]
+
+
+def momentum_prices():
+    # Returns from the end of Dec 2019 to the end of Nov 2020 (the 12-1 window):
+    # A +50%, B +20%, C +40%, D +45%. B then triples in December, the skipped month, so its
+    # plain 12-month return is the best - but momentum must ignore it.
+    p = pd.DataFrame(100.0, index=MDAYS, columns=list("ABCD"))
+    for c, level in {"A": 150.0, "B": 120.0, "C": 140.0, "D": 145.0}.items():
+        p.loc["2020-06-01":, c] = level
+    p.loc["2020-12-01":, "B"] = 360.0
+    return p
+
+
+def test_momentum_ranks_on_12_months_skipping_the_last_one():
+    scores = momentum_scores(momentum_prices(), list("ABCD"), D)
+    assert scores.to_dict() == pytest.approx({"A": 0.5, "D": 0.45, "C": 0.4, "B": 0.2})
+    assert list(scores.index) == ["A", "D", "C", "B"]  # best first
+
+
+def test_momentum_holds_the_top_fraction_equally():
+    w = momentum(momentum_prices(), {D: list("ABCD")}, [D], fraction=0.5)
+    assert w.loc[D][w.loc[D] > 0].to_dict() == {"A": 0.5, "D": 0.5}
+    # 10% of 4 stocks rounds up to 1: at least one stock is always held.
+    w = momentum(momentum_prices(), {D: list("ABCD")}, [D], fraction=0.1)
+    assert w.loc[D][w.loc[D] > 0].to_dict() == {"A": 1.0}
+
+
+def calm_prices(swings: dict) -> pd.DataFrame:
+    """Each stock alternates up and down by exactly its swing (in log terms), so its
+    volatility is proportional to the swing."""
+    sign = np.where(np.arange(len(MDAYS)) % 2 == 0, 1.0, -1.0)
+    return pd.DataFrame({c: 100 * np.exp(np.cumsum(a * sign)) for c, a in swings.items()}, index=MDAYS)
+
+
+def test_low_volatility_holds_the_calmest_members_equally():
+    p = calm_prices({"A": 0.02, "B": 0.01, "C": 0.03, "D": 0.01, "E": 0.001})  # E: not a member
+    vol = volatility_scores(p, list("ABCD"), D)
+    assert list(vol.index) == ["B", "D", "A", "C"]  # calmest first, ties alphabetical
+    assert vol["C"] / vol["B"] == pytest.approx(3.0)
+    assert vol["B"] == pytest.approx(0.01 * np.sqrt(252), rel=0.01)  # annualised
+    w = low_volatility(p, {D: list("ABCD")}, [D], n=3)
+    assert w.loc[D][w.loc[D] > 0].to_dict() == pytest.approx({"A": 1 / 3, "B": 1 / 3, "D": 1 / 3})
+
+
+def test_low_volatility_can_weight_by_inverse_volatility():
+    # The S&P 500 Low Volatility Index (SPLV) weights each stock by 1 / its volatility:
+    # a stock half as volatile gets twice the weight.
+    p = calm_prices({"A": 0.02, "B": 0.01, "C": 0.03})
+    w = low_volatility(p, {D: list("ABC")}, [D], n=2, weighting="inverse volatility")
+    assert w.loc[D][w.loc[D] > 0].to_dict() == pytest.approx({"A": 1 / 3, "B": 2 / 3})
+
+
+def nonzero(w):
+    return w.loc[:, (w != 0).any()].sort_index(axis=1)
+
+
+@pytest.mark.parametrize("strategy, params", [(momentum, {"fraction": 0.2}), (low_volatility, {"n": 5})])
+def test_monthly_strategies_ignore_prices_after_the_decision_date(strategy, params):
+    rng = np.random.default_rng(5)
+    days = pd.bdate_range("2018-01-01", "2020-12-31")
+    codes = [f"S{i:02d}" for i in range(30)]
+    steps = rng.normal(0.0003, 1.0, (len(days), 30)) * rng.uniform(0.005, 0.03, 30)
+    prices = pd.DataFrame(100 * np.exp(np.cumsum(steps, axis=0)), index=days, columns=codes)
+    dates = month_ends(days, "2019-01-01", "2020-12-31")
+    universe = {d: codes for d in dates}
+    t = dates[10]
+    changed = prices.copy()
+    after = changed.index > t
+    changed.loc[after] *= rng.uniform(0.5, 1.5, (after.sum(), 30))
+    a, b = strategy(prices, universe, dates, **params), strategy(changed, universe, dates, **params)
+    pd.testing.assert_frame_equal(nonzero(a.loc[:t]), nonzero(b.loc[:t]))
+    assert not nonzero(a.loc[t:].iloc[1:]).equals(nonzero(b.loc[t:].iloc[1:]))  # later decisions changed

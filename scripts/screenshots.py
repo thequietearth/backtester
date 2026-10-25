@@ -59,13 +59,13 @@ def main():
             # screen: use a window tall enough to show everything instead.
             page = browser.new_page(viewport={"width": 1440, "height": 6000}, device_scale_factor=1)
             capture(page, "/", OUT / "app.png", "Year by year")
-            # The comparison view: add two SPY timing rules to the default two strategies.
-            for option in ("SPY 200-day trend", "SPY golden cross (50/200 days)"):
+            # The comparison view: add momentum and low volatility to the default two strategies.
+            for option in ("Momentum (top 10%, monthly)", "Low volatility (50 calmest, quarterly)"):
                 page.locator('[data-testid="stMultiSelect"] input').first.click()
                 page.get_by_role("option", name=option).click()
                 page.keyboard.press("Escape")
             # Wait until the new strategies' charts exist, then for the rerun to finish.
-            page.locator(".js-plotly-plot text", has_text="SPY golden cross").first.wait_for(timeout=180_000)
+            page.locator(".js-plotly-plot text", has_text="Low volatility").first.wait_for(timeout=180_000)
             page.wait_for_selector('[data-testid="stStatusWidget"]', state="detached", timeout=180_000)
             shoot(page, OUT / "comparison.png")
             capture(page, "/Coverage", OUT / "coverage.png", "Members not covered or flagged")

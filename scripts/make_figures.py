@@ -2,8 +2,9 @@
 (1999-2025, 10 bps per side, cash earning the 3-month T-bill rate).
 
 Usage: python scripts/make_figures.py   (after scripts/build_data.py)
-Writes docs/figures/growth.png, drawdown.png, survivorship.png, timing.png and prints
-the numbers the write-up quotes. Colours are the app's validated palette (light surface).
+Writes docs/figures/growth.png, drawdown.png, survivorship.png, timing.png, factors.png
+and prints the numbers the write-up quotes. Colours are the app's validated palette (light
+surface).
 """
 import sys
 from pathlib import Path
@@ -18,11 +19,13 @@ import pandas as pd  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from bt.coverage import rankable_universe  # noqa: E402
+from bt.coverage import rankable_by_date, rankable_universe  # noqa: E402
 from bt.data import load_tbill  # noqa: E402
 from bt.metrics import drawdown_series  # noqa: E402
-from bt.report import backtest_window, daily_decisions, run_strategy, summary  # noqa: E402
-from bt.strategies import spy_buy_and_hold, spy_golden_cross, spy_rsi2, spy_trend, top_n  # noqa: E402
+from bt.report import (backtest_window, contributions, daily_decisions, monthly_decisions, run_strategy,  # noqa: E402
+                       summary, turnover)
+from bt.strategies import (low_volatility, momentum, spy_buy_and_hold, spy_golden_cross, spy_rsi2,  # noqa: E402
+                           spy_trend, top_n)
 from bt.universe import formation_dates  # noqa: E402
 
 CACHE = ROOT / "data" / "cache"
@@ -60,6 +63,14 @@ def main():
                                             prices, 10, cal, w, tbill)
     spy = run_strategy("SPY (benchmark)", spy_buy_and_hold(prices, {}, w.rebalance), prices, 10, cal, w, tbill)
     days = daily_decisions(cal, w)
+    months, quarters = monthly_decisions(cal, w), monthly_decisions(cal, w, every=3)
+    factor = {}
+    for label in ("pit", "naive"):
+        by_month = rankable_by_date(pd.read_parquet(CACHE / f"universe_monthly_{label}.parquet"))
+        factor[label, "mom"] = run_strategy("Momentum (top 10%, monthly)", momentum(prices, by_month, months),
+                                            prices, 10, cal, w, tbill)
+        factor[label, "lowvol"] = run_strategy("Low volatility (50 calmest, quarterly)",
+                                               low_volatility(prices, by_month, quarters), prices, 10, cal, w, tbill)
     timing = [run_strategy(name, rule(prices, {}, days), prices, 10, cal, w, tbill)
               for name, rule in (("SPY 200-day trend", spy_trend), ("SPY golden cross (50/200 days)", spy_golden_cross),
                                  ("SPY RSI(2) dip-buying", spy_rsi2))]
@@ -129,12 +140,32 @@ def main():
                  fontsize=13, fontweight="bold", color=INK)
     fig.tight_layout()
     fig.savefig(OUT / "timing.png", dpi=150)
-    print("wrote docs/figures/growth.png, drawdown.png, survivorship.png, timing.png\n")
+    # Momentum and low volatility: one panel each against SPY, same scale.
+    fig, axes = plt.subplots(1, 2, figsize=(10, 4), sharey=True, facecolor=SURFACE)
+    for ax, key in zip(axes, ("mom", "lowvol")):
+        run = factor["pit", key]
+        ax.plot(10_000 * run.equity, color=BLUE, linewidth=1.8, label="Strategy")
+        ax.plot(10_000 * spy.equity, color=AQUA, linestyle="--", linewidth=1.6, label="SPY (benchmark)")
+        ax.set_yscale("log")
+        ax.yaxis.set_major_locator(mticker.LogLocator(base=10, subs=(1, 2, 5)))
+        ax.yaxis.set_major_formatter(mticker.FuncFormatter(dollars))
+        ax.yaxis.set_minor_locator(mticker.NullLocator())
+        style(ax, "")
+        ax.set_title(run.name, loc="left", fontsize=11, color=INK)
+    axes[0].legend(frameon=False, loc="upper left", labelcolor=INK, fontsize=9)
+    fig.suptitle("Momentum and low volatility: growth of $10,000, 1999–2025 (log scale)", x=0.01, ha="left",
+                 fontsize=13, fontweight="bold", color=INK)
+    fig.tight_layout()
+    fig.savefig(OUT / "factors.png", dpi=150)
+    print("wrote docs/figures/growth.png, drawdown.png, survivorship.png, timing.png, factors.png\n")
 
     table = pd.DataFrame([summary(runs["pit", "top1"], spy), summary(runs["pit", "top10"], spy),
-                          *[summary(r, spy) for r in timing], summary(spy, spy),
+                          *[summary(r, spy) for r in timing],
+                          summary(factor["pit", "mom"], spy), summary(factor["pit", "lowvol"], spy), summary(spy, spy),
                           {**summary(runs["naive", "top1"], spy), "Strategy": "Last year's #1 (naive)"},
-                          {**summary(runs["naive", "top10"], spy), "Strategy": "Last year's top 10 (naive)"}])
+                          {**summary(runs["naive", "top10"], spy), "Strategy": "Last year's top 10 (naive)"},
+                          {**summary(factor["naive", "mom"], spy), "Strategy": "Momentum (naive)"},
+                          {**summary(factor["naive", "lowvol"], spy), "Strategy": "Low volatility (naive)"}])
     print(table.round(2).to_string(index=False))
     u = rankable_universe(pd.read_parquet(CACHE / "coverage_pit_detail.parquet"), formation_dates(cal, w.years))
     for cost in (0, 50):
@@ -145,6 +176,29 @@ def main():
         zero = run_strategy(name, rule(prices, {}, days), prices, 10, cal, w)
         print(f"{name} with cash at 0% instead of T-bills: CAGR {summary(zero, zero_spy)['CAGR %']:.2f}% "
               f"(vs {summary(run, spy)['CAGR %']:.2f}%)")
+
+    # Momentum and low volatility: what the write-up quotes.
+    for key in ("mom", "lowvol"):
+        run = factor["pit", key]
+        sold = turnover(run)
+        bounds = run.window.boundaries
+        per_year = pd.Series({y: sold[(sold.index >= bounds[i]) & (sold.index < bounds[i + 1])].sum()
+                              for i, y in enumerate(run.yearly.index)})
+        held = (run.holdings.drop(columns="cash") > 0).sum(axis=1).mean()
+        print(f"\n{run.name}: average {held:.0f} stocks held, turnover {100 * per_year.iloc[1:].mean():.0f}% a year "
+              "(after the first)")
+        for lo, hi in ((1999, 2009), (2010, 2025)):
+            r, b = run.yearly.loc[lo:hi], spy.yearly.loc[lo:hi]
+            print(f"  {lo}-{hi}: {100 * ((1 + r).prod() ** (1 / len(r)) - 1):.1f}% a year vs SPY "
+                  f"{100 * ((1 + b).prod() ** (1 / len(b)) - 1):.1f}%")
+        diff = 100 * (run.yearly - spy.yearly)
+        print("  years vs SPY (pts):", ", ".join(f"{y} {d:+.0f}" for y, d in diff.items()))
+        top = contributions(run, prices).sum().sort_values(ascending=False)
+        print("  biggest total contributors (pts of each year's starting value, summed):",
+              ", ".join(f"{c} {100 * v:+.0f}" for c, v in top.head(5).items()))
+        for cost in (0, 50):
+            r = run_strategy(run.name, run.weights, prices, cost, cal, w, tbill)
+            print(f"  at {cost} bps: CAGR {summary(r, spy)['CAGR %']:.2f}%")
 
 
 if __name__ == "__main__":

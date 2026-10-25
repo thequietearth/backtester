@@ -6,7 +6,7 @@ Holding period ends at the first trading day of 2002.
 import numpy as np
 import pandas as pd
 
-from bt.coverage import band, coverage_by_year
+from bt.coverage import band, coverage_by_year, decision_universe, rankable_by_date
 
 CAL = pd.bdate_range("1999-12-01", "2002-01-31")
 CONS = pd.DataFrame({"date": pd.Timestamp("2000-01-03"),
@@ -21,7 +21,9 @@ SMAP = pd.DataFrame({
 
 
 def series(start=None, end=None):
-    s = pd.Series(100.0, index=CAL)
+    # The price wiggles 0.1% a day around 100: a real close changes almost every day, and a
+    # flat line would (rightly) fail the frozen-price check.
+    s = pd.Series(100.0 * (1 + 0.001 * (-1.0) ** np.arange(len(CAL))), index=CAL)
     if start:
         s[s.index < start] = np.nan
     if end:
@@ -65,7 +67,7 @@ def test_a_price_jump_in_the_formation_year_makes_a_member_suspect():
 def test_a_jump_in_the_holding_year_is_flagged_but_still_covered():
     # A real crash while held (e.g. Lehman, -94% in a day) must stay in the results.
     crash = series()
-    crash[crash.index >= pd.Timestamp("2001-09-17")] = 6.0
+    crash[crash.index >= pd.Timestamp("2001-09-17")] *= 0.06
     cons = CONS[CONS.ticker == "AAA"]
     summary, detail = coverage_by_year(cons, SMAP[SMAP.ticker == "AAA"], pd.DataFrame({"AAA": crash}), CAL, [2001])
     assert detail.status.tolist() == ["ok"] and bool(detail.holding_jump[0])
@@ -76,7 +78,7 @@ def test_adjusted_price_moving_while_traded_price_doesnt_is_suspect():
     # Real case: Safeway's 1998 split was applied twice - the adjusted price doubled on the
     # split date while the traded price didn't move.
     adj = series()
-    adj[adj.index >= pd.Timestamp("2000-02-28")] = 200.0
+    adj[adj.index >= pd.Timestamp("2000-02-28")] *= 2
     raw = series()
     cons = CONS[CONS.ticker == "AAA"]
     smap = SMAP[SMAP.ticker == "AAA"]
@@ -96,8 +98,8 @@ def test_adjusted_return_far_from_traded_return_is_suspect_but_splits_are_explai
                                  raw_prices=pd.DataFrame({"AAA": raw}))
     assert detail.status.tolist() == ["suspect prices"]
     # A 2-for-1 split: the traded price halves, the split factor doubles, nothing is suspect.
-    flat = pd.Series(100.0, index=days)
-    raw_split = flat.where(days < pd.Timestamp("2000-06-01"), 50.0)
+    flat = series()
+    raw_split = flat.where(days < pd.Timestamp("2000-06-01"), flat / 2)
     factor = pd.Series(1.0, index=days).where(days < pd.Timestamp("2000-06-01"), 2.0)
     _, detail = coverage_by_year(cons, smap, pd.DataFrame({"AAA": flat}), CAL, [2001],
                                  raw_prices=pd.DataFrame({"AAA": raw_split}),
@@ -109,7 +111,7 @@ def test_split_counted_twice_is_caught_even_when_split_factors_are_supplied():
     # Real case: Safeway's "traded" price from EODHD was already split-adjusted, and the split
     # was applied again to the adjusted price. Split factors must not hide that.
     adj = series()
-    adj[adj.index >= pd.Timestamp("2000-02-28")] = 200.0
+    adj[adj.index >= pd.Timestamp("2000-02-28")] *= 2
     factor = pd.Series(1.0, index=CAL).where(CAL < pd.Timestamp("2000-02-28"), 2.0)
     cons, smap = CONS[CONS.ticker == "AAA"], SMAP[SMAP.ticker == "AAA"]
     _, detail = coverage_by_year(cons, smap, pd.DataFrame({"AAA": adj}), CAL, [2001],
@@ -143,3 +145,102 @@ def test_bands():
     assert band(95.0) == "trusted"
     assert band(88.0) == "lower coverage"
     assert band(84.9) == "unreliable"
+
+
+def test_a_frozen_price_in_the_formation_year_is_suspect():
+    # Real cases: EODHD's Weatherford series sits at exactly $1,000,000 for all of 2006, and
+    # HPC repeats one close for 57 days in 2007. A frozen price has zero volatility, so a
+    # low-volatility ranking would pick it first. Genuine members never repeated a close more
+    # than 5 days in a row in 1998-2024, even with 1999-2001's 1/16-dollar price steps.
+    def frozen_for(days):
+        s = pd.Series(np.linspace(100, 120, len(CAL)), index=CAL)
+        i = CAL.get_loc(pd.Timestamp("2000-05-01"))
+        s.iloc[i + 1:i + 1 + days] = s.iloc[i]  # the same close `days` times after day i
+        return s
+    cons, smap = CONS[CONS.ticker == "AAA"], SMAP[SMAP.ticker == "AAA"]
+    _, detail = coverage_by_year(cons, smap, pd.DataFrame({"AAA": frozen_for(11)}), CAL, [2001])
+    assert detail.status.tolist() == ["suspect prices"]
+    _, detail = coverage_by_year(cons, smap, pd.DataFrame({"AAA": frozen_for(10)}), CAL, [2001])
+    assert detail.status.tolist() == ["ok"]
+
+
+# --- Universes on any decision date (monthly and quarterly strategies) -------------------
+
+def problem_members():
+    """One member per kind of problem, for the 2001 backtest year (formation date 2000-12-29)."""
+    def spiked():
+        s = series()
+        s[pd.Timestamp("2000-06-15")] = 300.0
+        return s
+
+    def holed():
+        s = series()
+        s[(CAL > pd.Timestamp("2000-10-02")) & (CAL < pd.Timestamp("2000-11-01"))] = np.nan
+        return s
+
+    def frozen():
+        s = pd.Series(np.linspace(100, 120, len(CAL)), index=CAL)
+        s[(CAL >= pd.Timestamp("2000-05-01")) & (CAL <= pd.Timestamp("2000-06-30"))] = 105.0
+        return s
+
+    def stepped(factor=2.0, on="2000-02-28"):
+        s = series()
+        s[s.index >= pd.Timestamp(on)] *= factor
+        return s
+
+    drift_adj = pd.Series(np.linspace(100, 290, len(CAL)), index=CAL)
+    drift_raw = pd.Series(np.linspace(100, 170, len(CAL)), index=CAL)
+    adj = {"OK": series(), "NOFORM": series(start="2000-03-01"), "NOHOLD": series(end="2000-12-29"),
+           "ENDS": series(end="2001-06-29"), "JUMP": spiked(), "HOLE": holed(), "FROZEN": frozen(),
+           "GLITCH": stepped(), "DRIFT": drift_adj, "SPLIT": series(), "SMALL": series()}
+    raw = {**adj, "GLITCH": series(), "DRIFT": drift_raw, "SPLIT": stepped(0.5, "2000-06-01")}
+    factors = pd.DataFrame({"SPLIT": pd.Series(1.0, index=CAL).where(CAL < pd.Timestamp("2000-06-01"), 2.0)})
+    tickers = list(adj) + ["NOSEC"]
+    cons = pd.DataFrame({"date": pd.Timestamp("2000-01-03"), "ticker": tickers})
+    smap = pd.DataFrame({"ticker": tickers, "start": pd.Timestamp("2000-01-03"), "end": pd.NaT,
+                         "code": list(adj) + [None], "status": "auto",
+                         "flags": ["small" if t == "SMALL" else "" for t in tickers]})
+    return cons, smap, pd.DataFrame(adj), pd.DataFrame(raw), factors
+
+
+def test_decision_universe_matches_the_coverage_report_on_a_formation_date():
+    # The fast checks for monthly and quarterly decisions must agree with the coverage
+    # report's (reference) checks wherever both apply: on year-end formation dates.
+    cons, smap, adj, raw, factors = problem_members()
+    _, detail = coverage_by_year(cons, smap, adj, CAL, [2001], raw_prices=raw, split_factors=factors)
+    fast = decision_universe(cons, smap, adj, CAL, [pd.Timestamp("2000-12-29")], raw_prices=raw,
+                             split_factors=factors)
+    expected = detail.set_index("ticker")["status"].replace({"no holding data": "ok"})
+    assert fast.set_index("ticker")["status"].to_dict() == expected.to_dict()
+    assert expected.to_dict() == {
+        "OK": "ok", "NOFORM": "no formation data", "NOHOLD": "ok", "ENDS": "ok", "JUMP": "suspect prices",
+        "HOLE": "suspect prices", "FROZEN": "suspect prices", "GLITCH": "suspect prices",
+        "DRIFT": "suspect prices", "SPLIT": "ok", "SMALL": "suspect identity", "NOSEC": "no security"}
+    assert set(fast.date) == {pd.Timestamp("2000-12-29")}
+    assert rankable_by_date(fast) == {pd.Timestamp("2000-12-29"): ["ENDS", "NOHOLD", "OK", "SPLIT"]}
+
+
+def test_decision_universe_checks_the_12_months_ending_on_each_decision_date():
+    # Decision on 2001-06-29: the window runs from the end of June 2000. A bad print in
+    # March 2000 is outside it; one in March 2001 is inside.
+    early, late = series(), series()
+    early[pd.Timestamp("2000-03-15")] = 300.0
+    late[pd.Timestamp("2001-03-15")] = 300.0
+    cons = pd.DataFrame({"date": pd.Timestamp("2000-01-03"), "ticker": ["EARLY", "LATE"]})
+    smap = pd.DataFrame({"ticker": ["EARLY", "LATE"], "start": pd.Timestamp("2000-01-03"), "end": pd.NaT,
+                         "code": ["EARLY", "LATE"], "status": "auto", "flags": ""})
+    d = pd.Timestamp("2001-06-29")
+    fast = decision_universe(cons, smap, pd.DataFrame({"EARLY": early, "LATE": late}), CAL, [d])
+    assert fast.set_index("ticker")["status"].to_dict() == {"EARLY": "ok", "LATE": "suspect prices"}
+
+
+def test_decision_universe_uses_the_members_on_each_date():
+    # NEW joins the index in March 2001: a member at the end of June, not at the end of 2000.
+    cons = pd.DataFrame({"date": [pd.Timestamp("2000-01-03")] + [pd.Timestamp("2001-03-01")] * 2,
+                         "ticker": ["AAA", "AAA", "NEW"]})
+    smap = pd.DataFrame({"ticker": ["AAA", "NEW"], "start": [pd.Timestamp("2000-01-03"), pd.Timestamp("2001-03-01")],
+                         "end": pd.NaT, "code": ["AAA", "NEW"], "status": "auto", "flags": ""})
+    prices = pd.DataFrame({"AAA": series(), "NEW": series()})
+    dates = [pd.Timestamp("2000-12-29"), pd.Timestamp("2001-06-29")]
+    u = rankable_by_date(decision_universe(cons, smap, prices, CAL, dates))
+    assert u == {dates[0]: ["AAA"], dates[1]: ["AAA", "NEW"]}

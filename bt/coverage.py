@@ -12,8 +12,9 @@ twice). A member is "suspect prices" and is not ranked if its formation year sho
   - a jump: the adjusted price doubles or halves in a day;
   - a hole: more than 10 trading days with no price;
   - a glitch: the adjusted price moves >25% in a day while the traded price moves <10%;
-  - an unexplained gap: adjusted and traded (split-basis) returns differ by >30%.
-So a fake +17,000% can't become a pick. A jump in the holding year is only flagged:
+  - an unexplained gap: adjusted and traded (split-basis) returns differ by >30%;
+  - a frozen price: the same close more than 10 days in a row.
+So a fake +17,000% can't become a pick, and a frozen series can't pass as the calmest stock. A jump in the holding year is only flagged:
 real crashes (Lehman, -94% in a day) must stay in the results.
 """
 import numpy as np
@@ -67,6 +68,28 @@ def has_hole(prices: pd.Series, calendar: pd.DatetimeIndex, start, end) -> bool:
     return longest > MAX_HOLE_DAYS
 
 
+def _longest_run(flags: np.ndarray) -> int:
+    """Length of the longest run of True values."""
+    if not flags.any():
+        return 0
+    edges = np.flatnonzero(np.diff(np.r_[False, flags, False].astype(np.int8)))
+    return int((edges[1::2] - edges[::2]).max())
+
+
+# Measured on EODHD for 1998-2024: genuine members never repeated a close more than 5 days
+# in a row, even with 1999-2001's 1/16-dollar price steps, while broken series repeat one
+# for weeks (HPC, 57 days in 2007) or a whole year (Weatherford at $1,000,000 in 2006).
+MAX_FROZEN_DAYS = 10
+
+
+def has_frozen_stretch(prices: pd.Series, start, end) -> bool:
+    """True if more than MAX_FROZEN_DAYS closes in a row within [start, end] equal the
+    close before. A frozen price is stale or placeholder data; its zero volatility would
+    make it the first pick of a low-volatility ranking."""
+    x = prices.loc[start:end].dropna().to_numpy()
+    return _longest_run(np.diff(x) == 0) > MAX_FROZEN_DAYS
+
+
 GAP_TOLERANCE = np.log(1.3)
 
 
@@ -104,14 +127,17 @@ def band(coverage_pct: float) -> str:
 
 
 def _spell_lookup(security_map: pd.DataFrame):
-    by_ticker = {t: g for t, g in security_map.groupby("ticker")}
+    """spell_on(ticker, date) -> the ticker's first membership spell covering `date`, as a
+    dict (code, status, flags), or None."""
+    by_ticker = {}
+    for row in security_map.to_dict("records"):
+        by_ticker.setdefault(row["ticker"], []).append(row)
 
     def spell_on(ticker, date):
-        g = by_ticker.get(ticker)
-        if g is None:
-            return None
-        hit = g[(g["start"] <= date) & (g["end"].isna() | (g["end"] > date))]
-        return hit.iloc[0] if len(hit) else None
+        for row in by_ticker.get(ticker, []):
+            if row["start"] <= date and (pd.isna(row["end"]) or row["end"] > date):
+                return row
+        return None
     return spell_on
 
 
@@ -160,7 +186,7 @@ def coverage_by_year(constituents: pd.DataFrame, security_map: pd.DataFrame, pri
                 status = "no formation data"
             # The glitch check compares with the true traded price: if the source already
             # split-adjusted it, multiplying by split factors would hide a double-counted split.
-            elif has_jump(s, f_start, f_date) or has_hole(s, cal, f_start, f_date) or (raw is not None and (
+            elif has_jump(s, f_start, f_date) or has_hole(s, cal, f_start, f_date)                     or has_frozen_stretch(s, f_start, f_date) or (raw is not None and (
                     has_adjustment_glitch(s, raw, f_start, f_date)
                     or has_unexplained_adjustment(s, raw_split, f_start, f_date))):
                 status = "suspect prices"
@@ -185,3 +211,82 @@ def coverage_by_year(constituents: pd.DataFrame, security_map: pd.DataFrame, pri
                         "holding_jump": int(d["holding_jump"].sum()),
                         "flagged": int((d["flags"] != "").sum()), "band": band(pct)})
     return pd.DataFrame(summary), pd.DataFrame(detail)
+
+
+# --- Universes on any decision date (monthly and quarterly strategies) -------------------
+
+def _formation_problem(adj: np.ndarray, raw: np.ndarray, raw_split: np.ndarray, trading: np.ndarray) -> str:
+    """The coverage report's formation checks on one member's prices over one window (numpy
+    arrays: adjusted, traded, traded on the split basis, and which rows are trading days).
+    Returns "ok" or the reason the member can't be ranked."""
+    if np.isnan(adj[0]) or np.isnan(adj[-1]):
+        return "no formation data"
+    x = adj[~np.isnan(adj)]
+    if (x <= 0).any() or (np.abs(np.diff(np.log(x))) > JUMP).any():
+        return "suspect prices"
+    if _longest_run(np.isnan(adj[trading])) > MAX_HOLE_DAYS or _longest_run(np.diff(x) == 0) > MAX_FROZEN_DAYS:
+        return "suspect prices"
+    both = ~np.isnan(adj) & ~np.isnan(raw)
+    a, r = adj[both], raw[both]
+    if len(a) >= 2 and (a > 0).all() and (r > 0).all():
+        if ((np.abs(np.diff(np.log(a))) > ADJ_MOVE) & (np.abs(np.diff(np.log(r))) < RAW_STILL)).any():
+            return "suspect prices"
+    ends = np.array([adj[0], adj[-1], raw_split[0], raw_split[-1]])
+    if not np.isnan(ends).any() and (ends > 0).all():
+        if abs(np.log(ends[1] / ends[0]) - np.log(ends[3] / ends[2])) > GAP_TOLERANCE:
+            return "suspect prices"
+    return "ok"
+
+
+def decision_universe(constituents: pd.DataFrame, security_map: pd.DataFrame, prices: pd.DataFrame, calendar,
+                      dates, raw_prices: pd.DataFrame | None = None,
+                      split_factors: pd.DataFrame | None = None, months: int = 12) -> pd.DataFrame:
+    """Which members may be ranked on each decision date (e.g. every month-end), for
+    strategies that rebalance more often than once a year.
+
+    The same rules as the coverage report (coverage_by_year), applied to the `months`
+    months ending on each date: from the last trading day of the month `months` earlier.
+    On a year-end that is exactly the coverage report's formation year, and a test checks
+    that both agree. It runs on numpy arrays prepared once, so hundreds of dates take
+    seconds rather than the report's per-member pandas work.
+
+    Returns one row per (date, member): date, ticker, code, status - "ok" (may be ranked)
+    or the reason not: "no security", "suspect identity", "no formation data", "suspect
+    prices". Nothing about holding is checked: that would need prices after the date.
+    """
+    from bt.universe import month_end
+
+    cal = pd.DatetimeIndex(calendar)
+    idx = prices.index.union(cal)
+    adj = prices.reindex(idx).to_numpy(dtype=float)
+    col = {c: i for i, c in enumerate(prices.columns)}
+    raw = np.full_like(adj, np.nan) if raw_prices is None else         raw_prices.reindex(index=idx, columns=prices.columns).to_numpy(dtype=float)
+    factors = 1.0 if split_factors is None else         split_factors.reindex(index=idx, columns=prices.columns).ffill().fillna(1.0).to_numpy(dtype=float)
+    raw_split = raw * factors
+    trading = idx.isin(cal)
+    spell_on = _spell_lookup(security_map)
+    rows = []
+    for d in dates:
+        d = pd.Timestamp(d)
+        i0, i1 = idx.searchsorted(month_end(cal, d, months)), idx.searchsorted(d, side="right")
+        snap = snapshot_on(constituents, d)
+        for ticker in members_on(constituents, d):
+            spell = spell_on(ticker, snap)
+            code = spell["code"] if spell is not None and isinstance(spell["code"], str) else None
+            flags = spell["flags"] if spell is not None and isinstance(spell["flags"], str) else ""
+            if code is None:
+                status = "no security"
+            elif "small" in flags.split(",") and spell["status"] != "manual":
+                status = "suspect identity"
+            elif code not in col:
+                status = "no formation data"
+            else:
+                j = col[code]
+                status = _formation_problem(adj[i0:i1, j], raw[i0:i1, j], raw_split[i0:i1, j], trading[i0:i1])
+            rows.append({"date": d, "ticker": ticker, "code": code, "status": status})
+    return pd.DataFrame(rows, columns=["date", "ticker", "code", "status"])
+
+
+def rankable_by_date(detail: pd.DataFrame) -> dict:
+    """{decision date: sorted codes that may be ranked then}, from decision_universe."""
+    return {pd.Timestamp(d): sorted(g.code[g.status == "ok"]) for d, g in detail.groupby("date")}

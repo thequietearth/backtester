@@ -1,7 +1,8 @@
 """Tests for the ticker -> security mapping in bt.data, with tiny made-up prices."""
+import numpy as np
 import pandas as pd
 
-from bt.data import apply_overrides, assess_candidate, choose_security
+from bt.data import apply_overrides, assess_candidate, choose_security, follow_renames
 
 CAL = pd.bdate_range("2000-01-03", "2000-12-29")  # trading calendar
 AS_OF = CAL[-1]
@@ -102,3 +103,112 @@ def test_override_can_split_a_spell_where_the_company_behind_the_ticker_changed(
     assert (out.loc[1, "start"], out.loc[1, "code"], out.loc[1, "status"]) == \
         (pd.Timestamp("2020-03-02"), "IR", "review")
     assert pd.isna(out.loc[1, "end"])
+
+
+# --- Renames: the same company under a new ticker -------------------------------------
+
+RCAL = pd.bdate_range("2008-01-01", "2016-12-30")
+RENAME = pd.Timestamp("2015-07-01")  # OLD leaves the index and NEW joins on this day
+
+
+def walk(seed, start="2008-01-01", end="2016-12-30", scale=1.0):
+    """A made-up company's adjusted prices: a random walk on the calendar."""
+    d = RCAL[(RCAL >= start) & (RCAL <= end)]
+    steps = np.random.default_rng(seed).normal(0.0003, 0.015, len(RCAL))
+    level = 50 * np.exp(np.cumsum(steps))[RCAL.isin(d)] * scale
+    return pd.Series(level, index=d)
+
+
+def frame(adjusted: pd.Series, traded: pd.Series | None = None) -> pd.DataFrame:
+    traded = adjusted if traded is None else traded.reindex(adjusted.index)
+    return pd.DataFrame({"date": adjusted.index, "close": traded.values, "adjusted_close": adjusted.values,
+                         "volume": 1e6})
+
+
+def rename_spells(old_start="2010-01-04"):
+    return pd.DataFrame({"ticker": ["OLD", "NEW"], "start": [pd.Timestamp(old_start), RENAME],
+                         "end": [RENAME, pd.NaT], "code": ["OLDX", "NEWX"], "status": "auto", "flags": ""})
+
+
+def follow(old: pd.Series, new: pd.Series, spells=None, new_traded=None):
+    eods = {"OLDX": frame(old), "NEWX": frame(new, new_traded)}
+    return follow_renames(rename_spells() if spells is None else spells, eods.get)
+
+
+def test_a_renamed_member_follows_the_code_that_carries_on():
+    # EODHD keeps the whole history under the new ticker (META since 2012) and a stub under
+    # the old one that stops at the rename (FB_old). Holding the stub would look like
+    # "data ended" for a company that carried on. The new code's adjusted prices sit at a
+    # different level (later dividends), but the daily returns are the same.
+    company = walk(1)
+    out = follow(company.loc[:"2015-06-30"], 0.9 * company, new_traded=company)
+    old = out[out.ticker == "OLD"]
+    assert len(old) == 1 and old.code.iloc[0] == "NEWX" and "renamed" in old["flags"].iloc[0]
+    assert out[out.ticker == "NEW"].code.tolist() == ["NEWX"]
+
+
+def test_a_rename_is_not_followed_into_history_the_old_code_lacks():
+    # The old code starts in June 2010 (EODHD truncates some histories); the new code has
+    # earlier prices that may be another company's. Decisions whose 12-month window would
+    # reach before June 2010 keep the old code; from 13 months after its start, the new.
+    company, other = walk(1), walk(2)
+    new = pd.concat([other.loc[:"2010-05-31"], company.loc["2010-06-01":]])
+    out = follow(company.loc["2010-06-01":"2015-06-30"], new, rename_spells("2010-09-01"))
+    old = out[out.ticker == "OLD"].reset_index(drop=True)
+    assert old[["start", "end", "code"]].values.tolist() == [
+        [pd.Timestamp("2010-09-01"), pd.Timestamp("2011-07-01"), "OLDX"],
+        [pd.Timestamp("2011-07-01"), RENAME, "NEWX"]]
+
+
+def test_different_prices_mean_a_different_company():
+    out = follow(walk(1).loc[:"2015-06-30"], walk(2))
+    assert out.code.tolist() == ["NEWX", "OLDX"] and (out["flags"] == "").all()
+
+
+def test_a_jump_at_the_rename_is_not_followed():
+    # Kraft paid a $16.50 special dividend when it became Kraft Heinz, and EODHD's KHC
+    # prices don't include it: a fake 19% drop at the rename. Following it would book a fake
+    # loss, so the old code (sold at its last price, flagged) stays.
+    company = walk(1)
+    new = company.where(company.index <= "2015-06-30", company * 0.8)
+    out = follow(company.loc[:"2015-06-30"], new)
+    assert out[out.ticker == "OLD"].code.tolist() == ["OLDX"]
+
+
+def test_codes_that_disagree_just_before_the_rename_are_not_followed():
+    # DowDuPont's reverse split and Corteva spin-off came three days before it became
+    # DuPont: one code shows -17% that day, the other +18%. Agreeing on 98% of days isn't
+    # enough when one day leaves a lasting gap between them.
+    company = walk(1)
+    i = company.index.get_loc(pd.Timestamp("2015-06-25"))
+    new = company.copy()
+    new.iloc[i:] *= 1.18
+    out = follow(company.loc[:"2015-06-30"], new)
+    assert out[out.ticker == "OLD"].code.tolist() == ["OLDX"]
+
+
+def test_a_one_day_glitch_that_reverses_does_not_block_a_rename():
+    # Real case: on the day HCP became Healthpeak, EODHD's new code repeats the previous
+    # close, then catches up the next day. The codes agree again: still a plain rename.
+    company = walk(1)
+    new = company.copy()
+    i = new.index.get_loc(pd.Timestamp("2015-06-25"))
+    new.iloc[i] = new.iloc[i - 1]
+    out = follow(company.loc[:"2015-06-30"], new)
+    assert out[out.ticker == "OLD"].code.tolist() == ["NEWX"]
+
+
+def test_a_new_code_rescaled_at_the_rename_is_not_followed():
+    # Arconic spun off Arconic Corp the day it became Howmet. EODHD rescaled Howmet's whole
+    # history by its estimate of the spin-off's value, so on the old code's last day the two
+    # codes show different traded prices (12.32 vs 16.06). That isn't a plain rename: the
+    # old code, sold at its last (pre-spin-off) price, is closer to what holders got.
+    company = walk(1)
+    out = follow(company.loc[:"2015-06-30"], 0.77 * company)
+    assert out[out.ticker == "OLD"].code.tolist() == ["OLDX"]
+
+
+def test_only_a_code_that_stops_at_the_rename_is_replaced():
+    company = walk(1)
+    out = follow(company, company)  # the old code keeps trading: nothing to fix
+    assert out[out.ticker == "OLD"].code.tolist() == ["OLDX"]

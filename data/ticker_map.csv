@@ -37,6 +37,7 @@ MIR,1997-08-07,2000-06-01,MIR1,Mirage Resorts (checked: prices end 2000-05-31)
 MIR,2001-04-03,2003-07-17,,Mirant: EODHD's MIR_old only starts in 2006
 SNT,1996-01-02,1999-10-26,,Sonat: not in EODHD. SNT today is Senstar Technologies
 TT,2002-05-13,2008-06-06,,American Standard / Trane Inc: not in EODHD. TT today is Ingersoll-Rand's history
+WEN,1996-01-02,2008-09-30,,"Wendy's International: EODHD's WEN_old has the same closes and volumes as today's WEN, i.e. Triarc's history (Triarc bought Wendy's in 2008 and took the ticker): about 50k shares a day against Wendy's ~1m, and Triarc's 2003 class B distribution as a -68% day. No EODHD code has Wendy's own prices"
 # Not in EODHD, or EODHD's prices start too late
 AZA.A,1996-01-02,2001-06-25,,Alza: not in EODHD
 COMS,1996-01-02,2000-07-28,,3Com: not in EODHD
@@ -53,5 +54,7 @@ TEN,1996-01-02,1999-11-05,,Tenneco before its 1999 split: EODHD's TEN_old only s
 LB,1996-01-02,2003-09-10,,Limited Brands before 2003-09: no clean EODHD prices (LTD starts 2003-09; LB_old2 is a different thin instrument before 2007)
 LB,2003-09-10,2013-11-29,LTD,Limited Brands (checked: yearly returns within a few points of Yahoo's BBWI for 2004-2012)
 LB,2013-11-29,2021-08-03,LB_old2,L Brands (checked: matches Yahoo's BBWI exactly from 2014)
+# Broken adjustments: another code holds the same company's prices with clean adjustments
+BLL,1996-01-02,2022-05-10,BALL,"Ball Corp (ticker BALL since 2022): EODHD's BLL series applies the 2002 and 2004 splits twice (the adjusted price doubles on each split day while the traded price doesn't move); BALL holds the same history with clean adjustments"
 # Broken price data: the code is right but its prices aren't usable for these dates
 PBG,2003-12-01,2010-03-01,,Pepsi Bottling Group: from 2004-09 EODHD's PBG becomes a different instrument (volume ~2k/day vs ~700k; price $55 -> $359)

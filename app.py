@@ -1,9 +1,9 @@
 """Streamlit entry point. Run with: streamlit run app.py
 
 Backtests simple rules on the S&P 500 and shows them next to SPY over exactly the same
-dates: v1's "buy last year's winners" and v2's timing rules on SPY. Reads only the local
-data cache built by scripts/build_data.py, plus the committed T-bill rates; it never calls
-a data API.
+dates: v1's "buy last year's winners", and v2's timing rules on SPY, momentum and low
+volatility. Reads only the local data cache built by scripts/build_data.py, plus the
+committed T-bill rates; it never calls a data API.
 """
 import math
 import sys
@@ -17,20 +17,24 @@ from plotly.subplots import make_subplots
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
-from bt.coverage import rankable_universe  # noqa: E402
+from bt.coverage import rankable_by_date, rankable_universe  # noqa: E402
 from bt.data import load_tbill  # noqa: E402
 from bt.metrics import drawdown_series  # noqa: E402
-from bt.report import backtest_window, daily_decisions, run_strategy, summary, year_table  # noqa: E402
-from bt.strategies import spy_buy_and_hold, spy_golden_cross, spy_rsi2, spy_trend, top_n  # noqa: E402
+from bt.report import (backtest_window, daily_decisions, monthly_decisions, run_strategy, summary,  # noqa: E402
+                       year_table)
+from bt.strategies import (low_volatility, momentum, spy_buy_and_hold, spy_golden_cross, spy_rsi2,  # noqa: E402
+                           spy_trend, top_n)
 from bt.universe import formation_dates  # noqa: E402
 
 CACHE = ROOT / "data" / "cache"
 FIRST_YEAR, LAST_YEAR = 1999, 2025
 TOP1, TOPN = "Last year's #1", "Last year's top N"
 TREND, CROSS, RSI2 = "SPY 200-day trend", "SPY golden cross (50/200 days)", "SPY RSI(2) dip-buying"
+MOM, LOWVOL = "Momentum (top 10%, monthly)", "Low volatility (50 calmest, quarterly)"
 SPY = "SPY (benchmark)"
 TIMING = {TREND: spy_trend, CROSS: spy_golden_cross, RSI2: spy_rsi2}
-PICKERS = {TOP1, TOPN}
+PORTFOLIOS = {MOM, LOWVOL}  # dozens of stocks, rebalanced within the year
+PICKERS = {TOP1, TOPN} | PORTFOLIOS  # stock-picking: these use the universe setting
 PIT = "Point-in-time: the index members at the time"
 NAIVE = "Naive: today's members only (shows survivorship bias)"
 TBILL, ZERO = "3-month T-bill rate", "0%"
@@ -55,10 +59,11 @@ def load():
     naive = pd.read_parquet(CACHE / "coverage_naive_detail.parquet")
     cov = pd.read_parquet(CACHE / "coverage_pit_summary.parquet")
     tbill = load_tbill(ROOT / "data" / "tbill_dtb3.csv")
-    return prices, pit, naive, cov, tbill
+    monthly = {mode: pd.read_parquet(CACHE / f"universe_monthly_{mode}.parquet") for mode in ("pit", "naive")}
+    return prices, pit, naive, cov, tbill, monthly
 
 
-prices, pit_detail, naive_detail, cov_summary, tbill = load()
+prices, pit_detail, naive_detail, cov_summary, tbill, monthly_detail = load()
 cal = prices["SPY"].dropna().index
 
 with st.sidebar:
@@ -66,8 +71,8 @@ with st.sidebar:
     st.page_link("pages/1_Coverage.py", label="Coverage report", icon="📊")
     st.divider()
     st.header("Settings")
-    chosen = st.multiselect("Strategies (up to 4)", [TOP1, TOPN, TREND, CROSS, RSI2], default=[TOP1, TOPN],
-                            max_selections=4, key="strategies")
+    chosen = st.multiselect("Strategies (up to 4)", [TOP1, TOPN, MOM, LOWVOL, TREND, CROSS, RSI2],
+                            default=[TOP1, TOPN], max_selections=4, key="strategies")
     n = st.slider("N, for top N", 1, 50, 10, key="n")
     start, end = st.select_slider("Years", options=list(range(FIRST_YEAR, LAST_YEAR + 1)),
                                   value=(FIRST_YEAR, LAST_YEAR), key="years")
@@ -77,10 +82,12 @@ with st.sidebar:
                     help="Uninvested money earns the 3-month US Treasury bill rate (FRED series DTB3), "
                          "and the Sharpe ratio is measured beyond it. Matters most for timing rules, "
                          "which sit in cash for long stretches.")
-    mode = st.radio("Universe, for last year's #1 and top N", [PIT, NAIVE], key="universe")
-    st.caption("Last year's #1 / top N: ranked on the last trading day of each year, bought at the next "
-               "day's close. SPY timing rules: decided every day at the close, traded the next day. "
-               "SPY buy-and-hold is always shown.")
+    mode = st.radio("Universe, for stock-picking strategies", [PIT, NAIVE], key="universe")
+    st.caption("Every strategy decides at a close and trades at the next day's close. Last year's #1 / top N: "
+               "ranked on the last trading day of each year. Momentum: the top 10% by return from 12 months "
+               "ago to 1 month ago, re-ranked every month-end. Low volatility: the 50 members with the "
+               "calmest daily prices over the past year, re-ranked every quarter. SPY timing rules: decided "
+               "every day. SPY buy-and-hold is always shown.")
 
 
 @st.cache_data(show_spinner="Running the backtest...")
@@ -88,17 +95,24 @@ def compute(chosen: tuple, n: int, start: int, end: int, cost: int, mode: str, c
     window = backtest_window(cal, start, end)
     rate = tbill if cash == TBILL else None
     detail = pit_detail if mode == PIT else naive_detail
+    monthly = monthly_detail["pit" if mode == PIT else "naive"]
     universe = rankable_universe(detail, formation_dates(cal, window.years))
+    by_month = rankable_by_date(monthly)
     runs = {SPY: run_strategy(SPY, spy_buy_and_hold(prices, universe, window.rebalance), prices, cost, cal, window, rate)}
     for name in chosen:
         if name in TIMING:
             w, label = TIMING[name](prices, {}, daily_decisions(cal, window)), name
+        elif name == MOM:
+            w, label = momentum(prices, by_month, monthly_decisions(cal, window)), name
+        elif name == LOWVOL:
+            w, label = low_volatility(prices, by_month, monthly_decisions(cal, window, every=3), n=50), name
         elif name == TOP1:
             w, label = top_n(prices, universe, window.rebalance, n=1), TOP1
         else:
             w, label = top_n(prices, universe, window.rebalance, n=n), f"Last year's top {n}"
         runs[name] = run_strategy(label, w, prices, cost, cal, window, rate)
-    labels = detail.dropna(subset=["code"]).drop_duplicates("code", keep="last").set_index("code")["ticker"].to_dict()
+    named = pd.concat([monthly[["code", "ticker"]], detail[["code", "ticker"]]]).dropna(subset=["code"])
+    labels = named.drop_duplicates("code", keep="last").set_index("code")["ticker"].to_dict()
     coverage = ({r.year: (r.band, r.coverage_pct) for r in cov_summary.itertuples()} if mode == PIT else None)
     return runs, labels, coverage
 
@@ -110,18 +124,18 @@ strategies = [(k, r) for k, r in runs.items() if k != SPY]
 
 if PICKERS & set(chosen):
     if mode == NAIVE:
-        st.warning("**Naive universe.** Last year's #1 / top N rank only companies in the S&P 500 *today*, so they "
-                   "never pick a company that later collapsed or was taken over, and they rank some that weren't "
-                   "in the index yet. That flatters the results. It's here to show how big survivorship bias is, "
-                   "not as a real result.")
+        st.warning("**Naive universe.** The stock-picking strategies rank only companies in the S&P 500 *today*, so "
+                   "they never pick a company that later collapsed or was taken over, and they rank some that "
+                   "weren't in the index yet. That flatters the results. It's here to show how big survivorship "
+                   "bias is, not as a real result.")
     elif coverage:
         weak = [y for y in range(start, end + 1) if coverage.get(y, ("trusted",))[0] != "trusted"]
         if weak:
             lo = min(coverage[y][1] for y in weak)
-            st.info(f"⚠ **Lower coverage in {weak[0]}–{weak[-1]}** ({len(weak)} of {end - start + 1} years) for last "
-                    f"year's #1 / top N: as few as {lo:.0f}% of that year's members had usable price data, so a "
-                    "missing stock could have ranked higher. Every top-10 pick was checked by hand "
-                    "(docs/top10-review.md). Years are labelled in the table below.")
+            st.info(f"⚠ **Lower coverage in {weak[0]}–{weak[-1]}** ({len(weak)} of {end - start + 1} years) for the "
+                    f"stock-picking strategies: as few as {lo:.0f}% of that year's members had usable price data, "
+                    "so a missing stock could have ranked differently. Every top-10 pick of last year's winners "
+                    "was checked by hand (docs/top10-review.md). Years are labelled in the tables below.")
 if not chosen:
     st.info("Choose at least one strategy in the sidebar.")
 
@@ -141,13 +155,14 @@ table = pd.DataFrame([{
     "Beat SPY": "—" if s is rows[-1] else fmt_pct(s["Years beating SPY %"], 0),
     "Trades/yr": f"{s['Trades per year']:.1f}",
     "Invested": fmt_pct(s["Time invested %"], 0)} for s in rows])
-st.dataframe(table, hide_index=True, width="stretch",
-             column_config={"Strategy": st.column_config.TextColumn(width="medium")})
+st.dataframe(table, hide_index=True, width="stretch",  # wide enough for the longest strategy name
+             column_config={"Strategy": st.column_config.TextColumn(width=275)})
 st.caption("**Return/yr**: compound annual growth rate. **Sharpe**: return per unit of volatility, "
            f"{'beyond what T-bills paid' if cash == TBILL else 'with cash at 0%'}. **Worst fall**: the biggest drop "
            "from a peak; **recovery**: how long until that peak was regained (or until the end, if never). "
-           "**Beat SPY**: share of years with a higher return. **Invested**: average share of money in stocks "
-           "rather than cash.")
+           "**Beat SPY**: share of years with a higher return. **Trades/yr**: purchases and sales, including the small "
+           "top-ups and trims that keep a monthly portfolio equally weighted. **Invested**: average share of money "
+           "in stocks rather than cash.")
 
 
 # --- Charts: one small chart per strategy, each against SPY --------------------------
@@ -190,15 +205,18 @@ if strategies:
 # --- Year by year -------------------------------------------------------------------
 if strategies:
     st.subheader("Year by year")
-    st.caption("Each year runs from the January purchase to the next January's purchase. "
-               "† = the stock's data ended during the year: it was sold at its last price, and the real "
-               "outcome (often a takeover or bankruptcy) is unknown.")
+    st.caption("Each year runs from the January purchase to the next January's purchase. For momentum and low "
+               "volatility, holdings show the average number of stocks held, turnover (the share of the "
+               "portfolio sold during the year: 100% = all of it replaced once) and the three holdings that moved "
+               "the year's return most, in percentage points. † = the stock's data ended during the year: it was "
+               "sold at its last price, and the real outcome (often a takeover or bankruptcy) is unknown.")
     pct = st.column_config.NumberColumn(format="%.1f%%")
     tabs = st.tabs([r.name for _, r in strategies])
     for tab, (key, run) in zip(tabs, strategies):
         with tab:
             timing = key in TIMING
-            t = year_table(run, spy, labels, None if timing else coverage, timing=timing)
+            kind = "timing" if timing else "portfolio" if key in PORTFOLIOS else "picks"
+            t = year_table(run, spy, labels, None if timing else coverage, kind=kind, prices=prices)
             if timing:
                 t = t.drop(columns=["Coverage"])
             st.dataframe(t, hide_index=True, width="stretch", height=35 * (len(t) + 1) + 3,

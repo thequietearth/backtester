@@ -38,6 +38,19 @@ def test_comparison_of_four_strategies_including_timing_rules():
     assert trend["Invested"] != "100%"  # it does sit in cash sometimes
 
 
+def test_momentum_and_low_volatility_show_portfolio_holdings():
+    at = app()
+    at.multiselect(key="strategies").set_value(["Momentum (top 10%, monthly)", "Low volatility (50 calmest, quarterly)"])
+    at.run()
+    assert not at.exception
+    comparison = at.dataframe[0].value
+    assert list(comparison["Strategy"]) == ["Momentum (top 10%, monthly)", "Low volatility (50 calmest, quarterly)",
+                                            "SPY (benchmark)"]
+    for table in at.dataframe[1:]:
+        holdings = table.value["Holdings"]
+        assert holdings.str.contains(r"^\d+ stocks · \d+% turnover · biggest: ").all()
+
+
 def test_coverage_page_lists_only_members_with_issues():
     # Regression: `d.flags` is a pandas attribute, not the column, and once made every
     # member look flagged ("503 of 503").
@@ -58,6 +71,10 @@ def test_coverage_page_lists_only_members_with_issues():
     lambda at: at.multiselect(key="strategies").set_value([]),
     lambda at: at.radio(key="cash").set_value("0%"),
     lambda at: at.multiselect(key="strategies").set_value(["SPY RSI(2) dip-buying"]),
+    lambda at: (at.multiselect(key="strategies").set_value(["Momentum (top 10%, monthly)"]),
+                at.radio(key="universe").set_value(at.radio(key="universe").options[1])),
+    lambda at: (at.multiselect(key="strategies").set_value(["Low volatility (50 calmest, quarterly)"]),
+                at.select_slider(key="years").set_value((2008, 2009))),
 ])
 def test_settings_render(change):
     at = app()
