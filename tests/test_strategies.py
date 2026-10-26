@@ -233,7 +233,10 @@ def nonzero(w):
     return w.loc[:, (w != 0).any()].sort_index(axis=1)
 
 
-@pytest.mark.parametrize("strategy, params", [(momentum, {"fraction": 0.2}), (low_volatility, {"n": 5})])
+@pytest.mark.parametrize("strategy, params", [
+    (momentum, {"fraction": 0.2}), (low_volatility, {"n": 5}),
+    # M6 variants: a shorter lookback, and no skipped month (the latest month counts).
+    (momentum, {"fraction": 0.2, "lookback": 6, "skip": 0}), (momentum, {"fraction": 0.05, "lookback": 9})])
 def test_monthly_strategies_ignore_prices_after_the_decision_date(strategy, params):
     rng = np.random.default_rng(5)
     days = pd.bdate_range("2018-01-01", "2020-12-31")

@@ -146,4 +146,12 @@ A third, American Capital's bogus June 2009 dividend, was found by comparing adj
 - crisis crashes: National City, Qwest, Quanta Services and Williams' July 2002 liquidity crisis;
 - the March 2020 oil crash.
 
-Reproduce: `python scripts/audit_holdings.py`.
+**M6 ran the audit on all 36 momentum variants of the robustness check** (`--variants`), because their holdings differ from the published rule's. They found broken data that none of the published strategies had held on the bad days:
+- R.R. Donnelley's junk prices until December 2001 (about $0.02 a share, then +44,281% in a day), which gave one variant a fake +469% year;
+- splits applied twice: Gateway 1999, Liz Claiborne 2002, St. Jude 2004; Raytheon's corrupt adjustment in 2001;
+- spin-offs missing from the adjusted prices: Kansas City Southern 2000, E.W. Scripps 2008, Questar 2010;
+- wrong scale or junk: Electronic Arts 2003, Noble Energy 2013 and 2020, Schering-Plough from 2008.
+
+All are excluded by date. Low volatility turned out to have held R.R. Donnelley's junk prices for two quarters without any day bad enough to flag, so its result moved from 8.7% to 8.8% a year. Momentum moved from 9.2% to 9.3%, because a few members dropped out of its ranking at some month-ends. After the fixes, every flagged day across all strategies and variants is a real event.
+
+Reproduce: `python scripts/audit_holdings.py` (add `--variants` for the 36 momentum variants).

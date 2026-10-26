@@ -105,6 +105,16 @@ Build in this order, each step with its own plan and done-criteria.
 - Last year's worst N. **Caution from M2's sanity check:** the price-sanity checks set aside real crashes along with broken data, which is exactly what this strategy looks for. Real crashes and data errors need telling apart (by hand, or with a second source) before its results can be trusted.
 - Done with: hand verdicts on 26 set-aside crashes (`data/crash_review.csv`), a review of all 270 picks (`docs/worst10-review.md`), a spin-off screen, the contrarian strategy added to the holdings audit, and a floor for holdings whose data ended
 
+### M6: Is momentum real? A robustness check (final milestone for now) ✅ (done 2026-10-26)
+- Re-run the momentum rule with 36 variants (top 5/10/20%; 6/9/12-month lookback; skip the latest month or not; monthly or quarterly), all judged together. The best variant is never the headline
+- For each: lead over SPY overall and per era (1999–2009, 2010–2025), Sharpe, worst fall, turnover, break-even cost, t-statistic and bootstrap
+- Verdict criteria fixed before running: robust if ≥ 75% beat SPY and a majority beat it in each era; fragile if < 50% beat it; otherwise mixed
+- Built: `bt/robustness.py`, `scripts/robustness.py`, the app's Robustness page, `docs/robustness.md`; the holdings audit extended to all variants
+
+**Done when:** all 36 variants run on audited data, the page and write-up show every variant, and the verdict is stated against the fixed criteria. Result: **mixed**. 31 of 36 beat SPY over 1999–2025, all 36 in 1999–2009 but only 1 in 2010–2025, and none passes the luck test.
+
+**Status: the project is complete for now.** The ideas below and under "Later" stay parked.
+
 **Ideas that need more data work (assess before building):**
   - Dogs of the Dow: needs point-in-time Dow members and dividend history
   - Cap-weighted vs equal-weighted: needs historical shares outstanding
@@ -143,6 +153,7 @@ Build in this order, each step with its own plan and done-criteria.
 | Held positions | `scripts/audit_holdings.py` lists every held day with an adjustment glitch or a one-day doubling/halving; each gets a verdict in `docs/sanity-check.md`. Data errors are fixed by mapping or excluding dates; real crashes stay | Decided (M5b) |
 | Contrarian (M5c) | Last year's worst N, default 10, yearly, equal weight. Ranks the point-in-time members plus crashes a hand review found real (`data/crash_review.csv`); winner strategies don't read that file | Decided (M5c) |
 | Data ended while held, contrarian | Sold at the last price (rule 5). The app also shows a floor counting every such holding as worthless; the review classifies each ending (most were takeovers) | Decided (M5c) |
+| Robustness check (M6) | 36 momentum variants; verdict criteria fixed before running; all variants reported, never just the best | Decided (M6) |
 | Publishing | Local app; public code and a write-up | Decided |
 | Repo visibility | Public code, never any price data | Decided |
 | Code licence | MIT | Decided |

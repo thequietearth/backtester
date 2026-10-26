@@ -9,6 +9,8 @@
 - **Do the research versions of stock-picking do better?** Momentum, re-ranked monthly, earned about what last year's top 10 did, with much smaller crashes. Low volatility matched the market with a worst fall of −36% ([details](#v2-momentum-and-low-volatility)).
 - **Does buying last year's *losers* work instead?** Not overall: 5.1% a year against SPY's 8.4%, despite rebound years of +135% and +78% ([details](#v2-last-years-losers-contrarian)).
 
+**Finally, is momentum real?** 31 of 36 variations of the momentum rule beat SPY over 1999–2025. But all of that lead came from 1999–2009, and none passes a test for luck ([robustness check](robustness.md)).
+
 ## The numbers (1999–2025, 10 bps per trade, dividends reinvested)
 
 Uninvested cash earns the 3-month T-bill rate, and the Sharpe ratio measures return per unit of volatility *beyond* what T-bills paid.
@@ -68,8 +70,8 @@ Two of the most studied stock-picking ideas, run on the S&P 500 members of the t
 
 | Strategy | $10,000 becomes | Return per year | Volatility | Worst fall | Sharpe | Years beating SPY | Turnover per year |
 |---|---|---|---|---|---|---|---|
-| Momentum | $108,700 | 9.2% | 24% | −61% | 0.41 | 52% | 385% |
-| Low volatility | $95,600 | 8.7% | 14% | −36% | **0.52** | 41% | 85% |
+| Momentum | $110,200 | 9.3% | 24% | −61% | 0.41 | 52% | 386% |
+| Low volatility | $96,600 | 8.8% | 14% | −36% | **0.52** | 41% | 85% |
 | Last year's top 10 (v1) | $110,400 | 9.3% | 31% | −83% | 0.38 | 59% | 94% |
 | **SPY (S&P 500)** | **$89,000** | **8.4%** | **19%** | **−55%** | **0.42** | — | — |
 
@@ -77,11 +79,11 @@ Turnover is the share of the portfolio sold in a year: 100% means all of it was 
 
 ![Momentum and low volatility](figures/factors.png)
 
-- **Momentum earned what v1 earned, with less pain.** Its return (9.2% a year) is close to last year's top 10 (9.3%), but re-ranking every month among about 48 stocks cut the worst fall from −83% to −61%, and volatility from 31% to 24%. Like v1, it made its gains in the 2000s (5.3% a year against SPY's 0.9% in 1999–2009) and has lagged since (12.1% against 13.9% in 2010–2025).
+- **Momentum earned what v1 earned, with less pain.** Its return (9.3% a year) matches last year's top 10 (9.3%), but re-ranking every month among about 48 stocks cut the worst fall from −83% to −61%, and volatility from 31% to 24%. Like v1, it made its gains in the 2000s (5.4% a year against SPY's 0.9% in 1999–2009) and has lagged since (12.1% against 13.9% in 2010–2025). The [robustness check](robustness.md) shows that this pattern holds for almost every variation of the rule.
 - **The well-known "momentum crash" shows up.** In 2009, as the market rebounded from the financial crisis, the beaten-down stocks that momentum had sold rose fastest. Momentum trailed SPY by 12 points that year, after trailing it by 14 in 2008.
-- **Costs matter a lot for momentum.** It replaces nearly four times its holdings a year. With no costs it returns 10.1% a year; at 10 bps per trade, 9.2%; at 50 bps, 6.0%.
-- **Low volatility matched the market with far smaller falls.** It returned 8.7% a year against 8.4%, with three-quarters of the volatility and a worst fall of −36% against −55%. Its Sharpe ratio of 0.52 is the best of the stock-picking strategies, level with the golden cross. It lags in strong rallies (34 points behind SPY in 1999 and 26 in 2023) and holds up in crashes (47 points ahead in 2000, 17 in 2008, 18 in 2022). Its biggest contributors were steady businesses: Southern Co. and NextEra (utilities), Johnson & Johnson, Republic Services and Coca-Cola.
-- **Survivorship bias again.** Run on today's members only, momentum appears to return 22.3% a year (instead of 9.2%) and low volatility 10.5% (instead of 8.7%). Low volatility suffers less from the bias, because calm stocks rarely collapse.
+- **Costs matter a lot for momentum.** It replaces nearly four times its holdings a year. With no costs it returns 10.1% a year; at 10 bps per trade, 9.3%; at 50 bps, 6.0%. Its lead over SPY disappears at about 20 bps.
+- **Low volatility matched the market with far smaller falls.** It returned 8.8% a year against 8.4%, with three-quarters of the volatility and a worst fall of −36% against −55%. Its Sharpe ratio of 0.52 is the best of the stock-picking strategies, level with the golden cross. It lags in strong rallies (34 points behind SPY in 1999 and 26 in 2023) and holds up in crashes (47 points ahead in 2000, 17 in 2008, 18 in 2022). Its biggest contributors were steady businesses: Southern Co. and NextEra (utilities), Johnson & Johnson, Republic Services and Coca-Cola.
+- **Survivorship bias again.** Run on today's members only, momentum appears to return 22.3% a year (instead of 9.3%) and low volatility 10.5% (instead of 8.8%). Low volatility suffers less from the bias, because calm stocks rarely collapse.
 - **Checked against real funds.** A replica of the Invesco S&P 500 Low Volatility ETF (SPLV), built with the same data and engine, returned 10.2% a year over 2012–2025 against SPLV's 10.0% after its 0.25% fee, and the two beat or trailed SPY in the same months (correlation 0.999). No fund runs exactly this momentum rule, so it was compared roughly with two momentum ETFs ([sanity check](sanity-check.md)).
 
 ## v2: last year's losers (contrarian)

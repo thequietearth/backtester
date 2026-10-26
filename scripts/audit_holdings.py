@@ -1,6 +1,6 @@
 """Audit what the strategies actually held: price moves on held days that can't be real.
 
-Usage: python scripts/audit_holdings.py   (after scripts/build_data.py)
+Usage: python scripts/audit_holdings.py [--variants]   (after scripts/build_data.py)
 
 The coverage report's checks keep broken series out of the *ranking*, but a stock bought
 before its data breaks is still held (CLAUDE.md rule 10: holding-period moves are kept,
@@ -13,7 +13,8 @@ position moved in a way that needs a human verdict:
     by hand and either kept or fixed in data/ticker_map.csv / data/price_exclusions.csv.
 It runs last year's top 50 and worst 50 (whose holdings include every smaller N), momentum
 and low volatility over 1999-2025 in both universes; the worst 50 uses the crash review
-(data/crash_review.csv). Verdicts are recorded in docs/sanity-check.md.
+(data/crash_review.csv). --variants adds all 36 momentum variants of the M6 robustness grid
+(point-in-time only), whose holdings differ from the published rule's. Verdicts are recorded in docs/sanity-check.md.
 """
 import sys
 from pathlib import Path
@@ -26,6 +27,7 @@ sys.path.insert(0, str(ROOT))
 from bt.coverage import ADJ_MOVE, JUMP, RAW_STILL, load_crash_review, rankable_by_date, rankable_universe  # noqa: E402
 from bt.data import load_tbill  # noqa: E402
 from bt.report import backtest_window, monthly_decisions, run_strategy  # noqa: E402
+from bt.robustness import variant_grid  # noqa: E402
 from bt.strategies import bottom_n, low_volatility, momentum, top_n  # noqa: E402
 from bt.universe import formation_dates  # noqa: E402
 
@@ -71,6 +73,11 @@ def main():
                       "worst 50": bottom_n(prices, crashes, w.rebalance, n=50),
                       "momentum": momentum(prices, monthly, monthly_decisions(cal, w)),
                       "low volatility": low_volatility(prices, monthly, monthly_decisions(cal, w, every=3))}
+        if "--variants" in sys.argv and mode == "pit":
+            for v in variant_grid().itertuples(index=False):
+                name = f"momentum {round(100 * v.fraction)}% {v.lookback}-{v.skip} every {v.every}"
+                strategies[name] = momentum(prices, monthly, monthly_decisions(cal, w, every=v.every),
+                                            lookback=v.lookback, skip=v.skip, fraction=v.fraction)
         for name, weights in strategies.items():
             run = run_strategy(name, weights, prices, 10, cal, w, tbill)
             moves = held_moves(run.holdings, prices, raw)

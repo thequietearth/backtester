@@ -3,7 +3,8 @@
 
 Usage: python scripts/make_figures.py   (after scripts/build_data.py)
 Writes docs/figures/growth.png, drawdown.png, survivorship.png, timing.png, factors.png,
-contrarian.png and prints the numbers the write-up quotes. Colours are the app's validated palette (light
+contrarian.png, robustness.png (when scripts/robustness.py has run) and prints the numbers
+the write-up quotes. Colours are the app's validated palette (light
 surface).
 """
 import sys
@@ -22,6 +23,7 @@ sys.path.insert(0, str(ROOT))
 from bt.coverage import load_crash_review, rankable_by_date, rankable_universe  # noqa: E402
 from bt.data import load_tbill  # noqa: E402
 from bt.metrics import drawdown_series  # noqa: E402
+from bt.robustness import ERAS  # noqa: E402
 from bt.report import (backtest_window, contributions, daily_decisions, monthly_decisions, run_strategy,  # noqa: E402
                        summary, turnover)
 from bt.strategies import (bottom_n, low_volatility, momentum, spy_buy_and_hold, spy_golden_cross,  # noqa: E402
@@ -241,6 +243,52 @@ def main():
                                    real_crashes=real_crashes)
         r = run_strategy(f"worst {n}", bottom_n(prices, losers, w.rebalance, n=n), prices, 10, cal, w, tbill)
         print(f"  worst {n}: CAGR {summary(r, spy)['CAGR %']:.2f}%, worst fall {summary(r, spy)['Max drawdown %']:.0f}%")
+
+    robustness_figure()
+
+
+def robustness_figure():
+    """M6: every momentum variant's lead over SPY, sorted, and the same leads by era."""
+    path = CACHE / "robustness.parquet"
+    if not path.exists():
+        print("no data/cache/robustness.parquet: run scripts/robustness.py for robustness.png")
+        return
+    r = pd.read_parquet(path)
+    (a1, z1), (a2, z2) = ERAS
+    e1, e2 = f"lead_{a1}_{z1}", f"lead_{a2}_{z2}"
+    fig, (left, right) = plt.subplots(1, 2, figsize=(12, 7.2), facecolor=SURFACE,
+                                      gridspec_kw={"width_ratios": [1.25, 1]})
+    d = r.sort_values("lead").reset_index(drop=True)
+    left.axvline(0, color=MUTED, linestyle=":", linewidth=1.2)
+    left.scatter(d.lead, range(len(d)), s=36, color=BLUE, zorder=3)
+    k = d.index[d.is_default][0]
+    left.scatter([d.lead[k]], [k], s=180, facecolors="none", edgecolors=BLUE, linewidths=1.6, zorder=3)
+    left.annotate("the published rule", (d.lead[k], k), xytext=(10, 0), textcoords="offset points",
+                  va="center", fontsize=9, color=INK)
+    left.set_yticks(range(len(d)), d.label, fontsize=7.5)
+    left.xaxis.set_major_formatter(mticker.FuncFormatter(lambda v, _: f"{v:+.0f}"))
+    style(left, "")
+    left.grid(axis="x", color=GRID, linewidth=0.8)
+    left.set_title("Lead over SPY, 1999–2025 (points a year)", loc="left", fontsize=11, color=INK)
+    right.axvline(0, color=MUTED, linestyle=":", linewidth=1.2)
+    right.axhline(0, color=MUTED, linestyle=":", linewidth=1.2)
+    right.scatter(r[e1], r[e2], s=36, color=BLUE, zorder=3)
+    dr = r[r.is_default]
+    right.scatter(dr[e1], dr[e2], s=180, facecolors="none", edgecolors=BLUE, linewidths=1.6, zorder=3)
+    right.annotate("the published rule", (dr[e1].iloc[0], dr[e2].iloc[0]), xytext=(10, 0), textcoords="offset points",
+                   va="center", fontsize=9, color=INK)
+    for ax in (right.xaxis, right.yaxis):
+        ax.set_major_formatter(mticker.FuncFormatter(lambda v, _: f"{v:+.0f}"))
+    style(right, "")
+    right.grid(axis="x", color=GRID, linewidth=0.8)
+    right.set_xlabel(f"Lead over SPY, {a1}–{z1} (points a year)", color=MUTED)
+    right.set_ylabel(f"Lead over SPY, {a2}–{z2} (points a year)", color=MUTED)
+    right.set_title("The same variants in each era", loc="left", fontsize=11, color=INK)
+    fig.suptitle("Momentum: 36 variants of the rule, each one dot", x=0.01, ha="left", fontsize=13,
+                 fontweight="bold", color=INK)
+    fig.tight_layout()
+    fig.savefig(OUT / "robustness.png", dpi=150)
+    print("wrote docs/figures/robustness.png")
 
 
 if __name__ == "__main__":

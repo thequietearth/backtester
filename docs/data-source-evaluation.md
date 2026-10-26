@@ -233,6 +233,14 @@ None of these was fixed by editing a price.
 
 All are excluded by date. The price checks' "suspect" verdicts were reviewed by hand for every member that would rank among a year's 15 worst (`data/crash_review.csv`): 11 real crashes and 15 broken series. Details: `docs/worst10-review.md`.
 
+**36 momentum variants (M6).** Holding many more stocks at many more moments turned up more of the same kinds of error. The worst was R.R. Donnelley at about $0.02 a share until December 2001, then +44,281% in a day. The rest were:
+- splits applied twice: Gateway, Liz Claiborne, St. Jude 2004;
+- Raytheon's corrupt adjustment;
+- spin-offs left out: Kansas City Southern, E.W. Scripps, Questar;
+- wrong scale or junk: Electronic Arts, Noble Energy, Schering-Plough.
+
+All are excluded by date. Details: `docs/sanity-check.md` and `docs/robustness.md`. The lesson for anyone using this source: the automatic checks catch most broken data, but only an audit of what strategies actually hold catches the rest.
+
 **Pass test 3, dividends:** passes (`scripts/validate_prices.py`). For 20 stocks that still trade, each year's adjusted return beats the raw-price return by about the dividend yield (KO +3.1% a year, XOM +3.0%, SPY +2.0%). Against Yahoo's total-return prices, the median yearly difference is 0.0. Only 4 of 611 full years differ by more than 0.5 points: PFE 1995, JPM 1995 and 1996, and KO 2001 (by 0.6).
 
 ### Norgate Data (Platinum): strongest on paper, over budget

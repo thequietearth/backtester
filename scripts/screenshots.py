@@ -2,8 +2,8 @@
 
 Usage: python scripts/screenshots.py   (after scripts/build_data.py)
 Needs the dev tools: pip install -r requirements-dev.txt && python -m playwright install chromium
-Writes docs/screenshots/app.png (default view), comparison.png (four strategies) and
-coverage.png.
+Writes docs/screenshots/app.png (default view), comparison.png (four strategies),
+coverage.png and robustness.png.
 """
 import subprocess
 import sys
@@ -69,6 +69,7 @@ def main():
             page.wait_for_selector('[data-testid="stStatusWidget"]', state="detached", timeout=180_000)
             shoot(page, OUT / "comparison.png")
             capture(page, "/Coverage", OUT / "coverage.png", "Members not covered or flagged")
+            capture(page, "/Robustness", OUT / "robustness.png", "All 36 variants")
             browser.close()
     finally:
         server.terminate()

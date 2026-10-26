@@ -92,3 +92,15 @@ def test_settings_render(change):
     change(at)
     at.run()
     assert not at.exception
+
+
+@pytest.mark.skipif(not (ROOT / "data" / "cache" / "robustness.parquet").exists(),
+                    reason="needs scripts/robustness.py to have run")
+def test_robustness_page_shows_every_variant_and_a_verdict():
+    at = app()
+    at.switch_page("pages/2_Robustness.py").run()
+    assert not at.exception
+    assert any(h.value.startswith("Verdict: ") for h in at.subheader)
+    table = at.dataframe[0].value
+    assert len(table) == 36 and table.Variant.str.endswith("(published)").sum() == 1
+

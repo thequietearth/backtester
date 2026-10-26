@@ -21,6 +21,7 @@ st.set_page_config(page_title="Coverage report", layout="wide")
 with st.sidebar:
     st.page_link("app.py", label="Results", icon="📈")
     st.page_link("pages/1_Coverage.py", label="Coverage report", icon="📊")
+    st.page_link("pages/2_Robustness.py", label="Robustness", icon="🧪")
 st.title("Coverage report")
 st.write(
     "For each backtest year: of the S&P 500 members on the formation date, how many have "

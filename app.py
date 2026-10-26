@@ -71,6 +71,7 @@ cal = prices["SPY"].dropna().index
 with st.sidebar:
     st.page_link("app.py", label="Results", icon="📈")
     st.page_link("pages/1_Coverage.py", label="Coverage report", icon="📊")
+    st.page_link("pages/2_Robustness.py", label="Robustness", icon="🧪")
     st.divider()
     st.header("Settings")
     chosen = st.multiselect("Strategies (up to 4)", [TOP1, TOPN, BOTTOMN, MOM, LOWVOL, TREND, CROSS, RSI2],
@@ -243,6 +244,8 @@ if strategies:
                                         "Year": st.column_config.NumberColumn(format="%d")})
 
 st.page_link("pages/1_Coverage.py", label="Coverage report: which members had usable data each year", icon="📊")
+st.page_link("pages/2_Robustness.py", icon="🧪",
+             label="Robustness: does momentum's lead survive other settings, eras, costs and luck?")
 st.caption("Data: S&P 500 membership from fja05680/sp500 (MIT); prices from EODHD, adjusted for splits and "
            "dividends, checked as described in docs/data-source-evaluation.md; 3-month T-bill rates from FRED "
            "(series DTB3, Board of Governors of the Federal Reserve System). Past results don't predict future ones.")

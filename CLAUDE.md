@@ -31,6 +31,7 @@ backtester/
     strategies.py       # one function per strategy
     metrics.py          # CAGR, volatility, Sharpe, drawdown, etc.
     report.py           # strategy runs over chosen years, summaries, year-by-year table
+    robustness.py       # M6: momentum variants and the statistics that judge them
   data/
     raw/                # downloaded source files (gitignored)
     cache/              # parquet price cache (gitignored)
