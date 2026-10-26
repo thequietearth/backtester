@@ -51,6 +51,17 @@ def test_momentum_and_low_volatility_show_portfolio_holdings():
         assert holdings.str.contains(r"^\d+ stocks · \d+% turnover · biggest: ").all()
 
 
+def test_worst_n_shows_its_floor_and_marks_picks_that_could_not_be_bought():
+    at = app()
+    at.multiselect(key="strategies").set_value(["Last year's worst N"])
+    at.run()
+    assert not at.exception
+    assert list(at.dataframe[0].value["Strategy"]) == ["Last year's worst 10", "SPY (benchmark)"]
+    assert any(c.value.startswith("**Floor for last year's worst 10:**") for c in at.caption)
+    year_2009 = at.dataframe[1].value.set_index("Year").loc[2009, "Holdings"]
+    assert "NCC (not bought)" in year_2009 and "WB (not bought)" in year_2009  # taken over on 2008-12-31
+
+
 def test_coverage_page_lists_only_members_with_issues():
     # Regression: `d.flags` is a pandas attribute, not the column, and once made every
     # member look flagged ("503 of 503").

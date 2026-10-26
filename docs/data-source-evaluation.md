@@ -226,6 +226,13 @@ It follows 19 renames, among them Facebook → Meta, AmerisourceBergen → Cenco
 
 None of these was fixed by editing a price.
 
+**Last year's losers (M5c).** Ranking losers exposes errors the automatic checks can't see, because they look like real losses:
+- **spin-offs missing from the adjusted prices:** First Data 2006 (Western Union), Cablevision 2011 (AMC Networks);
+- **dividends that were never paid:** American Capital 2009, and Williams from July 2002 (earlier than M3 found);
+- **a change of split basis:** Time Warner 2003.
+
+All are excluded by date. The price checks' "suspect" verdicts were reviewed by hand for every member that would rank among a year's 15 worst (`data/crash_review.csv`): 11 real crashes and 15 broken series. Details: `docs/worst10-review.md`.
+
 **Pass test 3, dividends:** passes (`scripts/validate_prices.py`). For 20 stocks that still trade, each year's adjusted return beats the raw-price return by about the dividend yield (KO +3.1% a year, XOM +3.0%, SPY +2.0%). Against Yahoo's total-return prices, the median yearly difference is 0.0. Only 4 of 611 full years differ by more than 0.5 points: PFE 1995, JPM 1995 and 1996, and KO 2001 (by 0.6).
 
 ### Norgate Data (Platinum): strongest on paper, over budget

@@ -2,8 +2,8 @@
 (1999-2025, 10 bps per side, cash earning the 3-month T-bill rate).
 
 Usage: python scripts/make_figures.py   (after scripts/build_data.py)
-Writes docs/figures/growth.png, drawdown.png, survivorship.png, timing.png, factors.png
-and prints the numbers the write-up quotes. Colours are the app's validated palette (light
+Writes docs/figures/growth.png, drawdown.png, survivorship.png, timing.png, factors.png,
+contrarian.png and prints the numbers the write-up quotes. Colours are the app's validated palette (light
 surface).
 """
 import sys
@@ -19,13 +19,13 @@ import pandas as pd  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from bt.coverage import rankable_by_date, rankable_universe  # noqa: E402
+from bt.coverage import load_crash_review, rankable_by_date, rankable_universe  # noqa: E402
 from bt.data import load_tbill  # noqa: E402
 from bt.metrics import drawdown_series  # noqa: E402
 from bt.report import (backtest_window, contributions, daily_decisions, monthly_decisions, run_strategy,  # noqa: E402
                        summary, turnover)
-from bt.strategies import (low_volatility, momentum, spy_buy_and_hold, spy_golden_cross, spy_rsi2,  # noqa: E402
-                           spy_trend, top_n)
+from bt.strategies import (bottom_n, low_volatility, momentum, spy_buy_and_hold, spy_golden_cross,  # noqa: E402
+                           spy_rsi2, spy_trend, top_n)
 from bt.universe import formation_dates  # noqa: E402
 
 CACHE = ROOT / "data" / "cache"
@@ -55,8 +55,12 @@ def main():
     tbill = load_tbill(ROOT / "data" / "tbill_dtb3.csv")
     w = backtest_window(cal, 1999, 2025)
     runs = {}
+    real_crashes = load_crash_review(ROOT / "data" / "crash_review.csv")
     for label, file in (("pit", "coverage_pit_detail.parquet"), ("naive", "coverage_naive_detail.parquet")):
         universe = rankable_universe(pd.read_parquet(CACHE / file), formation_dates(cal, w.years))
+        losers = rankable_universe(pd.read_parquet(CACHE / file), formation_dates(cal, w.years), real_crashes=real_crashes)
+        runs[label, "worst10"] = run_strategy("Last year's worst 10", bottom_n(prices, losers, w.rebalance, n=10),
+                                              prices, 10, cal, w, tbill)
         runs[label, "top1"] = run_strategy("Last year's #1", top_n(prices, universe, w.rebalance, n=1),
                                            prices, 10, cal, w, tbill)
         runs[label, "top10"] = run_strategy("Last year's top 10", top_n(prices, universe, w.rebalance, n=10),
@@ -99,7 +103,7 @@ def main():
     fig.savefig(OUT / "drawdown.png", dpi=150)
 
     # Survivorship bias: the same strategies ranked among today's members only.
-    cagr = {k: summary(r, spy)["CAGR %"] for k, r in runs.items()}
+    cagr = {k: summary(r, spy)["CAGR %"] for k, r in runs.items() if k[1] in ("top1", "top10")}
     spy_cagr = summary(spy, spy)["CAGR %"]
     fig, ax = plt.subplots(figsize=(10, 4.2), facecolor=SURFACE)
     groups = [("Last year's #1", "top1", BLUE), ("Last year's top 10", "top10", ORANGE)]
@@ -157,15 +161,29 @@ def main():
                  fontsize=13, fontweight="bold", color=INK)
     fig.tight_layout()
     fig.savefig(OUT / "factors.png", dpi=150)
-    print("wrote docs/figures/growth.png, drawdown.png, survivorship.png, timing.png, factors.png\n")
+    # Winners vs losers: last year's top 10 and worst 10 against SPY, one chart.
+    fig, ax = plt.subplots(figsize=(10, 5.2), facecolor=SURFACE)
+    for run, colour, ls in ((runs["pit", "top10"], ORANGE, "-"), (runs["pit", "worst10"], BLUE, "-"), (spy, AQUA, "--")):
+        ax.plot(10_000 * run.equity, color=colour, linestyle=ls, linewidth=2, label=run.name)
+    ax.set_yscale("log")
+    ax.yaxis.set_major_locator(mticker.LogLocator(base=10, subs=(1, 2, 5)))
+    ax.yaxis.set_major_formatter(mticker.FuncFormatter(dollars))
+    ax.yaxis.set_minor_locator(mticker.NullLocator())
+    style(ax, "Last year's winners vs last year's losers: growth of $10,000, 1999–2025 (log scale)")
+    ax.legend(frameon=False, loc="upper left", labelcolor=INK)
+    fig.tight_layout()
+    fig.savefig(OUT / "contrarian.png", dpi=150)
+    print("wrote docs/figures/growth.png, drawdown.png, survivorship.png, timing.png, factors.png, contrarian.png\n")
 
     table = pd.DataFrame([summary(runs["pit", "top1"], spy), summary(runs["pit", "top10"], spy),
                           *[summary(r, spy) for r in timing],
-                          summary(factor["pit", "mom"], spy), summary(factor["pit", "lowvol"], spy), summary(spy, spy),
+                          summary(factor["pit", "mom"], spy), summary(factor["pit", "lowvol"], spy),
+                          summary(runs["pit", "worst10"], spy), summary(spy, spy),
                           {**summary(runs["naive", "top1"], spy), "Strategy": "Last year's #1 (naive)"},
                           {**summary(runs["naive", "top10"], spy), "Strategy": "Last year's top 10 (naive)"},
                           {**summary(factor["naive", "mom"], spy), "Strategy": "Momentum (naive)"},
-                          {**summary(factor["naive", "lowvol"], spy), "Strategy": "Low volatility (naive)"}])
+                          {**summary(factor["naive", "lowvol"], spy), "Strategy": "Low volatility (naive)"},
+                          {**summary(runs["naive", "worst10"], spy), "Strategy": "Last year's worst 10 (naive)"}])
     print(table.round(2).to_string(index=False))
     u = rankable_universe(pd.read_parquet(CACHE / "coverage_pit_detail.parquet"), formation_dates(cal, w.years))
     for cost in (0, 50):
@@ -199,6 +217,30 @@ def main():
         for cost in (0, 50):
             r = run_strategy(run.name, run.weights, prices, cost, cal, w, tbill)
             print(f"  at {cost} bps: CAGR {summary(r, spy)['CAGR %']:.2f}%")
+
+    # Last year's worst 10: what the write-up quotes.
+    run = runs["pit", "worst10"]
+    for lo, hi in ((1999, 2009), (2010, 2025)):
+        r, b = run.yearly.loc[lo:hi], spy.yearly.loc[lo:hi]
+        print(f"\nworst 10 {lo}-{hi}: {100 * ((1 + r).prod() ** (1 / len(r)) - 1):.1f}% a year vs SPY "
+              f"{100 * ((1 + b).prod() ** (1 / len(b)) - 1):.1f}%", end="")
+    diff = 100 * (run.yearly - spy.yearly)
+    print("\n  years vs SPY (pts):", ", ".join(f"{y} {d:+.0f}" for y, d in diff.items()))
+    print("  best years:", ", ".join(f"{y} {100 * v:+.0f}%" for y, v in run.yearly.nlargest(4).items()),
+          "| worst years:", ", ".join(f"{y} {100 * v:+.0f}%" for y, v in run.yearly.nsmallest(4).items()))
+    for cost in (0, 50):
+        r = run_strategy(run.name, run.weights, prices, cost, cal, w, tbill)
+        print(f"  at {cost} bps: CAGR {summary(r, spy)['CAGR %']:.2f}%")
+    floor = run_strategy(run.name, run.weights, prices, 10, cal, w, tbill, ended_recovery=0.0)
+    print(f"  floor (every data-ended holding worthless): CAGR {summary(floor, spy)['CAGR %']:.2f}%")
+    svb = run.trades[(run.trades.action == "exit") & (run.trades.code == "SIVB")]
+    for t in svb.itertuples():
+        print(f"  SVB sold at its last price: {100 * t.value / run.equity[t.date]:.1f}% of the portfolio on {t.date.date()}")
+    for n in (1, 5, 20, 50):
+        losers = rankable_universe(pd.read_parquet(CACHE / "coverage_pit_detail.parquet"), formation_dates(cal, w.years),
+                                   real_crashes=real_crashes)
+        r = run_strategy(f"worst {n}", bottom_n(prices, losers, w.rebalance, n=n), prices, 10, cal, w, tbill)
+        print(f"  worst {n}: CAGR {summary(r, spy)['CAGR %']:.2f}%, worst fall {summary(r, spy)['Max drawdown %']:.0f}%")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,32 @@
+# Hand verdicts for members the price checks set aside ("suspect prices") that would rank
+# among a year's 15 worst performers. Only the contrarian strategy (last year's worst N) reads
+# this file: "real" = a genuine crash, may be ranked; "broken" = the data is wrong, stays out.
+# year = the year the stock would be bought; the crash is in the year before.
+# Evidence: python scripts/review_worst10.py --crashes (the write-up is docs/worst10-review.md).
+year,ticker,code,verdict,note
+1999,MRO,MRO,broken,"Traded price halves overnight on 1998-12-21 (16.92 -> 8.33) on normal volume; no event explains it"
+2001,AAPL,AAPL,real,"Apple fell 52% on 2000-09-29 after a profit warning; the year's -71% matches Yahoo"
+2001,SAPE,SAPE,broken,"Adjustment glitch: +87% adjusted on 2000-08-29 while the traded price barely moved"
+2001,FLR,FLR,broken,"On 2000-12-01 the series switches to the new Fluor spun off from Massey (73 -> 27, volume down tenfold): not a crash"
+2002,RTN,RTN,broken,"Adjusted price 372 -> 18.7 on 2001-05-14 while the traded price stayed at about $29.5"
+2002,PVN,PVN,real,"Providian collapsed in 2001 (credit-card losses): about $58 -> $3.55"
+2003,EDS,EDS,real,"Electronic Data Systems fell 53% on 2002-09-19 after an earnings warning"
+2004,EA,EA,broken,"EODHD's traded price is $775 before the November 2003 split and $46 after; Electronic Arts really rose in 2003"
+2004,TWX,TWX,broken,"Not a crash: price 47 -> 15.9 on 2003-10-16, the day AOL Time Warner became Time Warner (TWX), because the earlier prices are on a x3 split basis. Dates excluded in data/price_exclusions.csv"
+2005,TEK,TEK_old,broken,"Frozen prices: the same close for 28 days in a row"
+2006,KRB,KRB,broken,"$25.3 -> $0.12 on 2005-07-29 with zero volume; MBNA traded normally until Bank of America bought it at the end of 2005"
+2006,TEK,TEK_old,broken,"Frozen prices: the same close for 37 days in a row"
+2007,FDC,FDC_old,broken,"Not a crash: the Western Union spin-off (2006-09-29) is missing from the adjusted prices, a fake -44% day. Dates excluded in data/price_exclusions.csv"
+2008,ETFC,ETFC,real,"E*Trade fell 59% on 2007-11-12 on mortgage-related losses; -84% for the year"
+2009,AIG,AIG,real,"AIG's 2008 collapse and government rescue; -97% matches Yahoo"
+2009,XL,XL_old,real,"XL Capital fell about 93% in the 2008 financial crisis"
+2009,NCC,NCC_old,real,"National City collapsed in 2008 and was sold to PNC for about $2.23 a share"
+2009,GNW,GNW,real,"Genworth's 2008 collapse; -88% matches Yahoo"
+2009,WB,WB_old1,real,"Wachovia fell 82% on 2008-09-29, when its sale to Citigroup was announced"
+2009,SGP,SGP_old1,broken,"$25.8 -> $2.50 on 2008-01-08 with near-zero volume, then frozen for 62 days"
+2010,TWC,TWC,broken,"The traded price is steady around $25 while the adjusted price falls 63% on 2009-03-13: Time Warner Cable's special dividend and reverse split are mishandled"
+2011,RRD,RRD,broken,"Traded price 17.5 -> 5.7 overnight on 2010-12-20 with no event; EODHD's RRD prices are known to be off by large factors"
+2012,CVC,CVC,broken,"Not a crash: the AMC Networks spin-off (2011-06-30) is missing from the adjusted prices, a fake -28% day. Dates excluded in data/price_exclusions.csv"
+2014,NBL,NBL,broken,"Price 236 -> 59 on 2013-05-29, a 2-for-1 split mishandled; Noble Energy rose in 2013"
+2021,OXY,OXY,real,"Occidental fell 52% on 2020-03-09 in the oil price crash; -57% for the year matches Yahoo"
+2021,APA,APA,real,"Apache fell 54% on 2020-03-09 in the oil price crash; -44% for the year matches Yahoo"

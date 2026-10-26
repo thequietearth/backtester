@@ -8,9 +8,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from bt.coverage import RANKABLE, coverage_by_year, rankable_universe
+from bt.coverage import RANKABLE, coverage_by_year, load_crash_review, rankable_universe
 from bt.engine import run_backtest
-from bt.strategies import (low_volatility, momentum, momentum_scores, rsi, rsi2_positions, spy_buy_and_hold,
+from bt.strategies import (bottom_n, low_volatility, momentum, momentum_scores, rsi, rsi2_positions, spy_buy_and_hold,
                            spy_golden_cross, spy_rsi2, spy_trend, top_n, volatility_scores)
 from bt.universe import members_on, month_end, month_ends, naive_constituents, naive_security_map
 
@@ -249,3 +249,38 @@ def test_monthly_strategies_ignore_prices_after_the_decision_date(strategy, para
     a, b = strategy(prices, universe, dates, **params), strategy(changed, universe, dates, **params)
     pd.testing.assert_frame_equal(nonzero(a.loc[:t]), nonzero(b.loc[:t]))
     assert not nonzero(a.loc[t:].iloc[1:]).equals(nonzero(b.loc[t:].iloc[1:]))  # later decisions changed
+
+
+# --- Last year's worst N (contrarian) -------------------------------------------------
+
+def test_bottom_n_picks_last_years_worst_and_breaks_ties_alphabetically():
+    # Returns: B +20%, A +50%, C and D +80% (a tie), E +200% but not in the universe.
+    w = bottom_n(PRICES, UNIVERSE, [F_DATE], n=3)
+    assert w.loc[F_DATE][w.loc[F_DATE] > 0].to_dict() == pytest.approx({"B": 1 / 3, "A": 1 / 3, "C": 1 / 3})
+
+
+def test_bottom_n_decisions_ignore_prices_after_the_decision_date():
+    changed = PRICES.copy()
+    after = changed.index > F_DATE
+    changed.loc[after] *= np.random.default_rng(1).uniform(0.1, 10, size=(after.sum(), changed.shape[1]))
+    pd.testing.assert_frame_equal(bottom_n(PRICES, UNIVERSE, [F_DATE], n=2), bottom_n(changed, UNIVERSE, [F_DATE], n=2))
+
+
+def test_a_reviewed_real_crash_may_be_ranked_but_identity_problems_never():
+    # The price checks set aside real crashes along with broken data. A hand review
+    # (data/crash_review.csv) marks the real ones, which the contrarian ranking may use.
+    detail = pd.DataFrame({"year": 2021, "code": ["A", "B", "C", "D"],
+                           "status": ["ok", "suspect prices", "suspect identity", "suspect prices"]})
+    fd = pd.Series({2021: F_DATE})
+    assert rankable_universe(detail, fd) == {F_DATE: ["A"]}
+    real = {(2021, "B"), (2021, "C")}
+    assert rankable_universe(detail, fd, real_crashes=real) == {F_DATE: ["A", "B"]}
+
+
+def test_crash_review_file_only_accepts_real_or_broken(tmp_path):
+    path = tmp_path / "crash_review.csv"
+    path.write_text("year,ticker,code,verdict,note\n2009,AIG,AIG,real,bailout\n2004,GDW,GDW,broken,another instrument\n")
+    assert load_crash_review(path) == {(2009, "AIG")}
+    path.write_text("year,ticker,code,verdict,note\n2009,AIG,AIG,maybe,?\n")
+    with pytest.raises(ValueError, match="verdict"):
+        load_crash_review(path)

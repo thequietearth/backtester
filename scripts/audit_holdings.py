@@ -11,8 +11,9 @@ position moved in a way that needs a human verdict:
   - jump: the adjusted price doubles or halves in a day. Real crashes (Lehman, Enron) and
     broken series (a code turning into another instrument) look alike, so each is judged
     by hand and either kept or fixed in data/ticker_map.csv / data/price_exclusions.csv.
-It runs last year's top 50 (whose holdings include every smaller top N), momentum and low
-volatility over 1999-2025 in both universes. Verdicts are recorded in docs/sanity-check.md.
+It runs last year's top 50 and worst 50 (whose holdings include every smaller N), momentum
+and low volatility over 1999-2025 in both universes; the worst 50 uses the crash review
+(data/crash_review.csv). Verdicts are recorded in docs/sanity-check.md.
 """
 import sys
 from pathlib import Path
@@ -22,10 +23,10 @@ import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from bt.coverage import ADJ_MOVE, JUMP, RAW_STILL, rankable_by_date, rankable_universe  # noqa: E402
+from bt.coverage import ADJ_MOVE, JUMP, RAW_STILL, load_crash_review, rankable_by_date, rankable_universe  # noqa: E402
 from bt.data import load_tbill  # noqa: E402
 from bt.report import backtest_window, monthly_decisions, run_strategy  # noqa: E402
-from bt.strategies import low_volatility, momentum, top_n  # noqa: E402
+from bt.strategies import bottom_n, low_volatility, momentum, top_n  # noqa: E402
 from bt.universe import formation_dates  # noqa: E402
 
 CACHE = ROOT / "data" / "cache"
@@ -63,7 +64,11 @@ def main():
         yearly = rankable_universe(pd.read_parquet(CACHE / f"coverage_{mode}_detail.parquet"),
                                    formation_dates(cal, w.years))
         monthly = rankable_by_date(pd.read_parquet(CACHE / f"universe_monthly_{mode}.parquet"))
+        crashes = rankable_universe(pd.read_parquet(CACHE / f"coverage_{mode}_detail.parquet"),
+                                    formation_dates(cal, w.years),
+                                    real_crashes=load_crash_review(ROOT / "data" / "crash_review.csv"))
         strategies = {"top 50": top_n(prices, yearly, w.rebalance, n=50),
+                      "worst 50": bottom_n(prices, crashes, w.rebalance, n=50),
                       "momentum": momentum(prices, monthly, monthly_decisions(cal, w)),
                       "low volatility": low_volatility(prices, monthly, monthly_decisions(cal, w, every=3))}
         for name, weights in strategies.items():

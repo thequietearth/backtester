@@ -166,3 +166,20 @@ def test_rejects_leverage_and_short_selling():
         run_backtest(weights({0: {"A": 0.7, "B": 0.7}}), prices)
     with pytest.raises(ValueError, match="negative"):
         run_backtest(weights({0: {"A": -0.5}}), prices)
+
+
+def test_worst_case_counts_a_stock_whose_data_ended_as_worthless():
+    # For last year's losers, data often ends in bankruptcy, where holders got far less
+    # than the last price. `ended_recovery=0` books such a position at nothing: a lower bound
+    # next to the default (sold at the last price, recovery 1).
+    days = pd.bdate_range("2024-01-01", periods=20)
+    prices = pd.DataFrame({"A": [10, 10, 12] + [np.nan] * 17, "B": 10.0}, index=days)
+    w = pd.DataFrame({"A": [0.5], "B": [0.5]}, index=[days[0]])
+    r = run_backtest(w, prices, cost_bps=10, ended_recovery=0.0)
+    # Entry: E1 split equally. Day 2: A is worth 0.6 * E1, B 0.5 * E1. Day 13: A's data has
+    # ended; it brings in nothing (and nothing to pay costs on), so only B is left.
+    assert r.equity[days[12]] == pytest.approx(1.1 * E1)
+    assert r.equity[days[13]] == pytest.approx(0.5 * E1)
+    t = r.trades.iloc[-1]
+    assert (t.action, t.cost) == ("exit", 0.0)
+    assert t.note.startswith("data ended, real outcome unknown") and "counted as worth 0%" in t.note

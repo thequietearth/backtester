@@ -115,3 +115,15 @@ def test_portfolio_year_table_marks_holdings_whose_data_ended():
     t = year_table(run, spy, {"A": "AAA", "B": "BBB"}, None, kind="portfolio", prices=prices)
     assert t["Holdings"].iloc[0].startswith("2 stocks · ")
     assert t["Holdings"].iloc[0].endswith("biggest: BBB † -5.0, AAA +0.0 pts · data ended: 1 †")
+
+
+def test_year_table_marks_picks_that_could_not_be_bought():
+    # National City and Wachovia were taken over on 2008-12-31, the formation date: they could
+    # be ranked, but had no price the next day, so their share of the money stayed in cash.
+    prices = pd.DataFrame({"A": 100.0, "B": 100.0, "SPY": 100.0}, index=CAL)
+    prices.loc["2019-12-31":, "B"] = np.nan  # B has no price from the formation date on
+    win = backtest_window(CAL, 2020, 2020)
+    run = run_strategy("Worst 2", pd.DataFrame({"A": [0.5], "B": [0.5]}, index=win.rebalance), prices, 0, CAL, win)
+    spy = run_strategy("SPY", pd.DataFrame({"SPY": [1.0]}, index=win.rebalance), prices, 0, CAL, win)
+    t = year_table(run, spy, {"A": "AAA", "B": "BBB"}, None)
+    assert list(t["Holdings"]) == ["AAA, BBB (not bought)"]

@@ -76,10 +76,14 @@ def _trade_plan(weights: pd.DataFrame, calendar: pd.DatetimeIndex) -> dict:
 
 
 def run_backtest(weights: pd.DataFrame, prices: pd.DataFrame, cost_bps: float = 10.0,
-                 initial: float = 1.0, calendar=None, cash_rate: pd.Series | None = None) -> BacktestResult:
+                 initial: float = 1.0, calendar=None, cash_rate: pd.Series | None = None,
+                 ended_recovery: float = 1.0) -> BacktestResult:
     """Run target weights (rows = decision dates, columns = codes) through prices
     (adjusted close, one column per code). `calendar` defaults to the price dates;
-    `cash_rate` is a yearly rate by date (decimal) that cash earns, or None for 0%."""
+    `cash_rate` is a yearly rate by date (decimal) that cash earns, or None for 0%.
+    `ended_recovery` is the share of its last value a position brings in when its data
+    ends: 1 (the rule: sold at the last price) or 0 for a worst case (worthless, as in a
+    bankruptcy that wiped out the shareholders)."""
     c = cost_bps / 10_000
     w = _validate(weights)
     cal = pd.DatetimeIndex(calendar if calendar is not None else prices.index)
@@ -110,10 +114,13 @@ def run_backtest(weights: pd.DataFrame, prices: pd.DataFrame, cost_bps: float = 
             missing[k] = missing.get(k, 0) + 1
             if missing[k] > MAX_GAP_DAYS:
                 value = positions.pop(k)
-                cost = c * value
-                cash += value - cost
+                cost = c * value * ended_recovery
+                cash += value * ended_recovery - cost
+                note = f"{DATA_ENDED} (last price {marked_on.pop(k).date()})"
+                if ended_recovery != 1.0:
+                    note += f"; counted as worth {ended_recovery:.0%} of it"
                 trades.append({"date": t, "code": k, "action": "exit", "value": value, "price": marks.pop(k),
-                               "cost": cost, "note": f"{DATA_ENDED} (last price {marked_on.pop(k).date()})"})
+                               "cost": cost, "note": note})
                 missing.pop(k)
             # else: maybe a temporary gap - hold at the last value
 

@@ -70,8 +70,10 @@ class StrategyRun:
     risk_free: pd.Series | None  # daily return on cash, for Sharpe; None = 0%
 
 
-def run_strategy(name, weights, prices, cost_bps, calendar, window: Window, cash_rate=None) -> StrategyRun:
-    r = run_backtest(weights, prices, cost_bps=cost_bps, calendar=calendar, cash_rate=cash_rate)
+def run_strategy(name, weights, prices, cost_bps, calendar, window: Window, cash_rate=None,
+                 ended_recovery: float = 1.0) -> StrategyRun:
+    r = run_backtest(weights, prices, cost_bps=cost_bps, calendar=calendar, cash_rate=cash_rate,
+                     ended_recovery=ended_recovery)
     equity = r.equity.loc[:window.end]
     risk_free = cash_returns(equity.index, cash_rate) if cash_rate is not None else None
     return StrategyRun(name, weights, equity, r.holdings.loc[:window.end], r.trades[r.trades.date <= window.end],
@@ -169,7 +171,11 @@ def year_table(run: StrategyRun, spy: StrategyRun, labels: dict, coverage: dict 
             held = sorted(w[w > 0].index, key=lambda c: (-w[c], labels.get(c, c)))
             ended = set(run.trades[(run.trades.action == "exit") & run.trades.note.str.startswith(DATA_ENDED)
                                    & (run.trades.date >= start) & (run.trades.date <= stop + pd.Timedelta(days=14))].code)
-            holdings = ", ".join(labels.get(c, c) + (" †" if c in ended else "") for c in held) or "cash"
+            # A pick with no price on the purchase day (e.g. taken over on the formation date)
+            # can't be bought; its share stays in cash.
+            skipped = set(run.trades[(run.trades.action == "skipped") & (run.trades.date == start)].code)
+            holdings = ", ".join(labels.get(c, c) + (" †" if c in ended else "") + (" (not bought)" if c in skipped
+                                                                                    else "") for c in held) or "cash"
         s, b = run.yearly[y], spy.yearly.get(y)
         cov = ""
         if coverage and y in coverage:

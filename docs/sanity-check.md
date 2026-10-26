@@ -137,4 +137,13 @@ The Transocean move was neither a glitch nor a jump (the traded price moved too,
 
 The audit also checked positions held when a stock left the index (rule 6: keep holding until the next rebalance), because some codes carry on as junk after a takeover, or with a spin-off left unadjusted. Momentum held 86 positions across a removal, low volatility 32 and top 10 13. None moved badly afterwards.
 
+**M5c added the contrarian strategy (last year's worst 50) to the audit.** Losers meet far more extreme days: the worst 50 had 41 flagged days in the first run, 14 of them Signature Bank's shares trading for pennies after the bank failed. Two needed fixes:
+- **Time Warner, October 2003:** a fake −66% from a change of split basis;
+- **Williams, October 2002:** a glitch from bogus dividends, which moved the start of Williams' exclusion back to July 2002.
+
+A third, American Capital's bogus June 2009 dividend, was found by comparing adjusted and traded returns over each holding year. Details are in `docs/worst10-review.md`. The rest are real and stay:
+- bankruptcies and failures: Harnischfeger, Owens Corning, HealthSouth, Calpine, Dana, Freddie Mac, Washington Mutual, Circuit City, old GM, CIT, PG&E, SVB and Signature Bank;
+- crisis crashes: National City, Qwest, Quanta Services and Williams' July 2002 liquidity crisis;
+- the March 2020 oil crash.
+
 Reproduce: `python scripts/audit_holdings.py`.

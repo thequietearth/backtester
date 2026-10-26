@@ -4,9 +4,10 @@
 
 **The short answer:** chasing last year's winners beat the S&P 500 by about one percentage point a year, but with nearly three times the volatility and crashes of up to 98%. Measured by return per unit of risk, it did *worse* than simply holding the index.
 
-**v2 asks two more questions.**
+**v2 asks three more questions.**
 - **Can a simple trend rule on SPY avoid the big crashes?** Partly. The golden cross matched the market's return with a worst fall of −34% instead of −55% ([details](#v2-timing-rules-on-spy)).
 - **Do the research versions of stock-picking do better?** Momentum, re-ranked monthly, earned about what last year's top 10 did, with much smaller crashes. Low volatility matched the market with a worst fall of −36% ([details](#v2-momentum-and-low-volatility)).
+- **Does buying last year's *losers* work instead?** Not overall: 5.1% a year against SPY's 8.4%, despite rebound years of +135% and +78% ([details](#v2-last-years-losers-contrarian)).
 
 ## The numbers (1999–2025, 10 bps per trade, dividends reinvested)
 
@@ -83,11 +84,32 @@ Turnover is the share of the portfolio sold in a year: 100% means all of it was 
 - **Survivorship bias again.** Run on today's members only, momentum appears to return 22.3% a year (instead of 9.2%) and low volatility 10.5% (instead of 8.7%). Low volatility suffers less from the bias, because calm stocks rarely collapse.
 - **Checked against real funds.** A replica of the Invesco S&P 500 Low Volatility ETF (SPLV), built with the same data and engine, returned 10.2% a year over 2012–2025 against SPLV's 10.0% after its 0.25% fee, and the two beat or trailed SPY in the same months (correlation 0.999). No fund runs exactly this momentum rule, so it was compared roughly with two momentum ETFs ([sanity check](sanity-check.md)).
 
+## v2: last year's losers (contrarian)
+
+The mirror image of v1: each January, buy the 10 S&P 500 members that fell most the year before, in equal amounts, and hold them for a year. It bets on mean reversion, that big losers bounce back. Research finds that effect over three to five years. Over one year, last year's losers have tended to keep losing, the flip side of momentum.
+
+| Strategy | $10,000 becomes | Return per year | Volatility | Worst fall | Sharpe | Years beating SPY |
+|---|---|---|---|---|---|---|
+| Last year's worst 10 | $38,300 | 5.1% | 38% | −82% | 0.27 | 44% |
+| Last year's top 10 (v1) | $110,400 | 9.3% | 31% | −83% | 0.38 | 59% |
+| **SPY (S&P 500)** | **$89,000** | **8.4%** | **19%** | **−55%** | **0.42** | — |
+
+![Last year's winners vs last year's losers](figures/contrarian.png)
+
+- **Losers trailed the market.** Over 27 years, last year's worst 10 returned 5.1% a year against SPY's 8.4%, with twice SPY's volatility and the lowest return per unit of risk of anything tested.
+- **But not steadily.** After crashes, last year's losers rebounded hard: +135% in 2003, +78% in 2009, +55% in 2010 and +56% in 2013. At the end of 2014, $10,000 had grown to $32,100 against SPY's $22,200. Then losers kept losing: −48% in 2015 (mostly oil, gas and mining stocks after the oil price collapse) and −31% in 2024. By the end of 2025 the $10,000 was worth $37,200 against SPY's $88,800.
+- **The single worst stock is a trap.** Buying only last year's biggest loser lost 22% a year, and the worst fall reached −100%. With 5, 20 or 50 stocks the return is 5.4–7.5% a year, still below SPY.
+- **Survivorship bias is largest here.** On today's members only, last year's losers appear to return 28.4% a year, even more than the winners (27.9%). On today's list every loser is a company that survived and recovered; the ones that went bankrupt or were sold cheaply are missing. Using the members of the time turns 28.4% into 5.1%.
+- **Costs matter less than for momentum,** because it trades once a year: 5.3% a year with no costs, 4.3% at 50 bps.
+- **What the data can't show.** Ten picks' data ended while held. Eight were takeovers, which paid about the last price. SVB's 2023 failure is booked at its last price, though shareholders lost nearly everything: 2023 looks about 4 points too good (about 0.15 points a year overall). Counting every such stock as worthless gives a floor of 0.3% a year, which is far too pessimistic. And Williams can't be ranked for 2003 because its prices are broken: it was one of 2002's worst stocks and rose 251% in 2003, so the 2003 result misses a big winner.
+- **Checking it was most of the work.** The price checks set aside real crashes along with broken data, so 26 cases were judged by hand (11 real crashes, 15 broken series), and all 270 picks were checked, 145 against Yahoo and 125 by hand ([review](worst10-review.md)).
+
 ## How much to trust this
 - **The ranking misses some stocks in early years.** For 1999–2009, 86–95% of each year's members had usable price data; from 2010 it's 97–100% (see the coverage report). A stock missing from the data could have been the real #1. To guard against that, **all 270 top-10 picks were checked**, against Yahoo or by hand ([review](top10-review.md)).
 - **The data source has broken price histories.** Examples are splits counted twice, prices that continue as another company after a takeover, and corrupt dividend adjustments. Automatic checks keep suspect stocks out of the ranking, and hand fixes cover the rest. Prices were never edited by hand ([details](data-source-evaluation.md)).
 - **The data and engine reproduce real funds.** An equal-weight S&P 500 built the same way tracks the real equal-weight ETF (RSP) within about 0.4 points a year, and a low-volatility replica tracks SPLV within about 0.2 ([sanity check](sanity-check.md)).
 - **v2's bigger portfolios exposed more data errors, now fixed.** Holding about 50 stocks and trading monthly means holding stocks through events that v1's ten yearly picks rarely met. An audit of every day a strategy held a stock found a split counted twice (Ball), a split that never happened (US Steel), a code that turned into another instrument (Golden West), a fake jump on a merger day (Transocean), and Wendy's International mapped to another company's prices. All are fixed by remapping or excluding dates, never by editing a price. One fix changed v1: Ball joins 2003's top 10, so last year's top 10 now returns 9.31% a year instead of 9.33%. Renamed companies (Facebook → Meta and 18 others) now keep their prices through the rename instead of looking delisted.
+- **Last year's losers are where broken data concentrates,** because a data error often looks like a crash. Checking the contrarian picks found spin-offs missing from the adjusted prices (First Data, Cablevision), dividends that were never paid (American Capital, Williams) and a change of split basis (Time Warner). All are excluded by date; none changes the other strategies' results ([review](worst10-review.md)).
 - **Cash earns the 3-month T-bill rate** (FRED series DTB3), accrued daily at the previous day's rate.
 - **Some things aren't modelled:**
   - **Taxes,** which would hurt a strategy that sells everything every year, and timing rules that trade often.

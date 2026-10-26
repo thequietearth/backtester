@@ -16,9 +16,10 @@ A Streamlit app that backtests simple, rule-based stock strategies on the S&P 50
 
 Chasing winners beat the index by about a point a year, but with far bigger crashes and a worse return per unit of risk. Done naively, on today's S&P 500 list, the same strategy appears to make **28% a year**: that's survivorship bias.
 
-**v2 asks two more questions.**
+**v2 asks three more questions.**
 - **Can a simple trend rule on SPY avoid the big crashes?** Partly. The **golden cross** (hold SPY while its 50-day average is above its 200-day average) matched SPY's 8.4% a year with a worst fall of −34% instead of −55%.
 - **Do the research versions of stock-picking do better?** **Momentum** (the top 10% by return over the last year, skipping the latest month, re-ranked monthly) earned 9.2% a year, about what last year's top 10 did, with a worst fall of −61% instead of −83%. **Low volatility** (the 50 calmest members) earned 8.7% a year with a worst fall of −36%, and the best risk-adjusted return of the stock-pickers.
+- **Does buying last year's *losers* work instead?** No. The mirror image of v1 returned 5.1% a year against SPY's 8.4%, despite rebound years of +135% (2003) and +78% (2009). Done naively, on today's members, it appears to return 28% a year: survivorship bias at its largest.
 
 **[Read the results →](docs/results.md)**
 
@@ -28,6 +29,7 @@ Chasing winners beat the index by about a point a year, but with far bigger cras
 The app runs locally. Pick up to four strategies:
 - last year's #1
 - last year's top N
+- last year's worst N (contrarian)
 - momentum and low volatility
 - three timing rules on SPY: the 200-day trend, the golden cross and RSI(2) dip-buying
 
@@ -43,7 +45,8 @@ A coverage report shows, for each year, how many index members had usable price 
 - **[Data sources](docs/data-source-evaluation.md):** why EODHD (Yahoo and others lack delisted stocks), and the traps found, such as tickers reused by other companies and broken price histories.
 - **[Sanity check](docs/sanity-check.md):** built with the same data and engine, an equal-weight S&P 500 tracks RSP, the real equal-weight ETF, within about 0.4 points a year, and a low-volatility replica tracks SPLV within about 0.2. An audit of every day a strategy held a stock caught the price errors the automatic checks miss.
 - **[Top-10 pick review](docs/top10-review.md):** all 270 picks for 1999–2025, checked against Yahoo or by hand.
-- **Tests:** 125 tests, including hand-worked engine, metric, strategy and mapping cases and a no-lookahead proof for every strategy. Run `pytest`.
+- **[Worst-10 pick review](docs/worst10-review.md):** all 270 contrarian picks, plus hand verdicts on 26 crashes the price checks had set aside, because real crashes and broken data look alike.
+- **Tests:** 132 tests, including hand-worked engine, metric, strategy and mapping cases and a no-lookahead proof for every strategy. Run `pytest`.
 
 ## Setup
 
@@ -67,7 +70,7 @@ streamlit run app.py              # explore the results
 
 Other scripts:
 - `scripts/validate_prices.py` checks that the adjusted prices include dividends.
-- `scripts/run_v1.py` and `scripts/review_top10.py` print the full v1 results and the pick review.
+- `scripts/run_v1.py` and `scripts/review_top10.py` print the full v1 results and the pick review; `scripts/review_worst10.py` reviews the contrarian picks.
 - `scripts/make_figures.py` redraws the charts and prints the numbers in the results.
 - `scripts/sanity_rsp.py`, `scripts/sanity_factor_etfs.py` and `scripts/audit_holdings.py` run the sanity checks.
 - `scripts/screenshots.py` retakes the screenshots. It needs `pip install -r requirements-dev.txt` and `python -m playwright install chromium`.

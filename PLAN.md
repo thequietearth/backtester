@@ -101,8 +101,9 @@ Build in this order, each step with its own plan and done-criteria.
 - Low volatility: hold the 50 least volatile stocks of the past year
 - Built with them: month-end universes with the coverage report's checks (`bt.coverage.decision_universe`, which must agree with the report on every year-end), the frozen-price check, rename following (`bt.data.follow_renames`), the SPLV replica and momentum-ETF comparison (`scripts/sanity_factor_etfs.py`), and the holdings audit (`scripts/audit_holdings.py`), whose findings fixed data that also changed one v1 pick (Ball, 2003)
 
-**M5c: contrarian**
+**M5c: contrarian** ✅ (done 2026-10-26)
 - Last year's worst N. **Caution from M2's sanity check:** the price-sanity checks set aside real crashes along with broken data, which is exactly what this strategy looks for. Real crashes and data errors need telling apart (by hand, or with a second source) before its results can be trusted.
+- Done with: hand verdicts on 26 set-aside crashes (`data/crash_review.csv`), a review of all 270 picks (`docs/worst10-review.md`), a spin-off screen, the contrarian strategy added to the holdings audit, and a floor for holdings whose data ended
 
 **Ideas that need more data work (assess before building):**
   - Dogs of the Dow: needs point-in-time Dow members and dividend history
@@ -140,6 +141,8 @@ Build in this order, each step with its own plan and done-criteria.
 | Frozen prices | The same close more than 10 days in a row in the formation window → "suspect prices". Genuine members never exceeded 5 in 1998–2024 | Decided (M5b) |
 | Renames | A renamed member keeps the code that carries on only for a plain rename the prices prove (`bt.data.follow_renames`); with a corporate action on the rename day, or disagreeing series, the old code is sold at its last price and flagged | Decided (M5b) |
 | Held positions | `scripts/audit_holdings.py` lists every held day with an adjustment glitch or a one-day doubling/halving; each gets a verdict in `docs/sanity-check.md`. Data errors are fixed by mapping or excluding dates; real crashes stay | Decided (M5b) |
+| Contrarian (M5c) | Last year's worst N, default 10, yearly, equal weight. Ranks the point-in-time members plus crashes a hand review found real (`data/crash_review.csv`); winner strategies don't read that file | Decided (M5c) |
+| Data ended while held, contrarian | Sold at the last price (rule 5). The app also shows a floor counting every such holding as worthless; the review classifies each ending (most were takeovers) | Decided (M5c) |
 | Publishing | Local app; public code and a write-up | Decided |
 | Repo visibility | Public code, never any price data | Decided |
 | Code licence | MIT | Decided |
@@ -155,5 +158,8 @@ Build in this order, each step with its own plan and done-criteria.
 - Fundamental strategies: low P/E, high free-cash-flow yield, quality (return on capital), Greenblatt's "Magic Formula". Needs point-in-time fundamentals: SEC EDGAR XBRL data is free, carries each figure's filing date and covers delisted companies, from about 2009. Use a figure only after its filing date, as originally reported. A data project on the scale of M1; fits the trusted 2010–2025 years
 - Dividend-yield strategy (trailing 12-month dividends ÷ price); the dividend data is already downloaded
 - Settings for momentum and low volatility (share held, N, rebalancing frequency, inverse-volatility weighting)
+- Record how each holding whose data ended really ended (takeover price, bankruptcy) and use it instead of the last price
+- Screen every strategy's holdings for unadjusted spin-offs (big one-day drops on ordinary volume), not just the worst-10 picks
+- Contrarian over three to five years, the horizon where research finds losers bounce back
 - Add the adjusted-vs-traded drift check over each held stint to `scripts/audit_holdings.py`. It caught Transocean's merger day as a one-off, but needs a per-year threshold, because years of dividends legitimately open big gaps
 - Norgate Platinum ($630/year: prices from 1990, delisted stocks, daily index membership) if EODHD's early years turn out too thin

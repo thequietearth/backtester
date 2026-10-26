@@ -114,10 +114,32 @@ def has_unexplained_adjustment(adjusted: pd.Series, raw_split_adjusted: pd.Serie
 RANKABLE = {"ok", "no holding data"}
 
 
-def rankable_universe(detail: pd.DataFrame, formation_dates: pd.Series) -> dict:
-    """{formation date: sorted codes that may be ranked that year}, from coverage detail."""
-    return {formation_dates[y]: sorted(detail[(detail.year == y) & detail.status.isin(RANKABLE)].code)
-            for y in formation_dates.index}
+def rankable_universe(detail: pd.DataFrame, formation_dates: pd.Series, real_crashes=frozenset()) -> dict:
+    """{formation date: sorted codes that may be ranked that year}, from coverage detail.
+
+    `real_crashes` holds (year, code) pairs whose "suspect prices" status a hand review
+    found to be a genuine crash (data/crash_review.csv); those may be ranked too. Only the
+    contrarian strategy passes it: for winner strategies setting crashes aside is harmless,
+    because a crashing stock never ranks as a winner. Identity problems are never added.
+    """
+    reviewed = np.array([(y, c) in real_crashes for y, c in zip(detail.year, detail.code)], dtype=bool)
+    ok = detail.status.isin(RANKABLE) | ((detail.status == "suspect prices") & reviewed)
+    return {formation_dates[y]: sorted(detail[(detail.year == y) & ok].code) for y in formation_dates.index}
+
+
+CRASH_VERDICTS = {"real", "broken"}
+
+
+def load_crash_review(path) -> set:
+    """{(year, code)} judged real crashes in data/crash_review.csv. `year` is the year the
+    stock would be bought; the crash is in the year before. Verdicts: "real" (rank it) or
+    "broken" (the data is wrong: keep it out)."""
+    review = pd.read_csv(path, dtype={"code": str}, comment="#")
+    bad = set(review.verdict) - CRASH_VERDICTS
+    if bad:
+        raise ValueError(f"unknown verdict(s) in {path}: {sorted(bad)}; use real or broken")
+    real = review[review.verdict == "real"]
+    return {(int(y), c) for y, c in zip(real.year, real.code)}
 
 
 def band(coverage_pct: float) -> str:

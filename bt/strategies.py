@@ -32,10 +32,11 @@ def formation_returns(prices: pd.DataFrame, codes, date) -> pd.Series:
     return r.dropna()
 
 
-def ranked(prices: pd.DataFrame, codes, date) -> pd.Series:
-    """Formation returns, best first; ties break alphabetically so results repeat."""
+def ranked(prices: pd.DataFrame, codes, date, worst_first: bool = False) -> pd.Series:
+    """Formation returns, best first (or worst first); ties break alphabetically so
+    results repeat."""
     r = formation_returns(prices, codes, date)
-    order = sorted(r.index, key=lambda c: (-r[c], c))
+    order = sorted(r.index, key=lambda c: (r[c] if worst_first else -r[c], c))
     return r[order]
 
 
@@ -45,6 +46,18 @@ def top_n(prices: pd.DataFrame, universe: dict, rebalance_dates, n: int = 10) ->
     rows = {}
     for d in rebalance_dates:
         picks = list(ranked(prices, universe.get(d, []), d).index[:n])
+        rows[d] = {c: 1 / len(picks) for c in picks}
+    return _weights(rows, rebalance_dates)
+
+
+def bottom_n(prices: pd.DataFrame, universe: dict, rebalance_dates, n: int = 10) -> pd.DataFrame:
+    """Contrarian: hold last year's N worst performers, equal weight, for a year - the
+    mirror image of top_n. It bets on mean reversion, that big losers bounce back. Its
+    universe should include crashes a hand review found real (bt.coverage.rankable_universe
+    with real_crashes), because the price checks set real crashes aside with broken data."""
+    rows = {}
+    for d in rebalance_dates:
+        picks = list(ranked(prices, universe.get(d, []), d, worst_first=True).index[:n])
         rows[d] = {c: 1 / len(picks) for c in picks}
     return _weights(rows, rebalance_dates)
 

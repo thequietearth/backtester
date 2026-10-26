@@ -1,8 +1,8 @@
 """Streamlit entry point. Run with: streamlit run app.py
 
 Backtests simple rules on the S&P 500 and shows them next to SPY over exactly the same
-dates: v1's "buy last year's winners", and v2's timing rules on SPY, momentum and low
-volatility. Reads only the local data cache built by scripts/build_data.py, plus the
+dates: v1's "buy last year's winners", and v2's timing rules on SPY, momentum, low
+volatility and the contrarian "buy last year's losers". Reads only the local data cache built by scripts/build_data.py, plus the
 committed T-bill rates; it never calls a data API.
 """
 import math
@@ -17,24 +17,24 @@ from plotly.subplots import make_subplots
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
-from bt.coverage import rankable_by_date, rankable_universe  # noqa: E402
+from bt.coverage import load_crash_review, rankable_by_date, rankable_universe  # noqa: E402
 from bt.data import load_tbill  # noqa: E402
 from bt.metrics import drawdown_series  # noqa: E402
 from bt.report import (backtest_window, daily_decisions, monthly_decisions, run_strategy, summary,  # noqa: E402
                        year_table)
-from bt.strategies import (low_volatility, momentum, spy_buy_and_hold, spy_golden_cross, spy_rsi2,  # noqa: E402
-                           spy_trend, top_n)
+from bt.strategies import (bottom_n, low_volatility, momentum, spy_buy_and_hold, spy_golden_cross,  # noqa: E402
+                           spy_rsi2, spy_trend, top_n)
 from bt.universe import formation_dates  # noqa: E402
 
 CACHE = ROOT / "data" / "cache"
 FIRST_YEAR, LAST_YEAR = 1999, 2025
-TOP1, TOPN = "Last year's #1", "Last year's top N"
+TOP1, TOPN, BOTTOMN = "Last year's #1", "Last year's top N", "Last year's worst N"
 TREND, CROSS, RSI2 = "SPY 200-day trend", "SPY golden cross (50/200 days)", "SPY RSI(2) dip-buying"
 MOM, LOWVOL = "Momentum (top 10%, monthly)", "Low volatility (50 calmest, quarterly)"
 SPY = "SPY (benchmark)"
 TIMING = {TREND: spy_trend, CROSS: spy_golden_cross, RSI2: spy_rsi2}
 PORTFOLIOS = {MOM, LOWVOL}  # dozens of stocks, rebalanced within the year
-PICKERS = {TOP1, TOPN} | PORTFOLIOS  # stock-picking: these use the universe setting
+PICKERS = {TOP1, TOPN, BOTTOMN} | PORTFOLIOS  # stock-picking: these use the universe setting
 PIT = "Point-in-time: the index members at the time"
 NAIVE = "Naive: today's members only (shows survivorship bias)"
 TBILL, ZERO = "3-month T-bill rate", "0%"
@@ -60,10 +60,12 @@ def load():
     cov = pd.read_parquet(CACHE / "coverage_pit_summary.parquet")
     tbill = load_tbill(ROOT / "data" / "tbill_dtb3.csv")
     monthly = {mode: pd.read_parquet(CACHE / f"universe_monthly_{mode}.parquet") for mode in ("pit", "naive")}
-    return prices, pit, naive, cov, tbill, monthly
+    # Crashes a hand review found real: only the contrarian ranking uses them (see bt.coverage).
+    crashes = load_crash_review(ROOT / "data" / "crash_review.csv")
+    return prices, pit, naive, cov, tbill, monthly, crashes
 
 
-prices, pit_detail, naive_detail, cov_summary, tbill, monthly_detail = load()
+prices, pit_detail, naive_detail, cov_summary, tbill, monthly_detail, real_crashes = load()
 cal = prices["SPY"].dropna().index
 
 with st.sidebar:
@@ -71,9 +73,9 @@ with st.sidebar:
     st.page_link("pages/1_Coverage.py", label="Coverage report", icon="📊")
     st.divider()
     st.header("Settings")
-    chosen = st.multiselect("Strategies (up to 4)", [TOP1, TOPN, MOM, LOWVOL, TREND, CROSS, RSI2],
+    chosen = st.multiselect("Strategies (up to 4)", [TOP1, TOPN, BOTTOMN, MOM, LOWVOL, TREND, CROSS, RSI2],
                             default=[TOP1, TOPN], max_selections=4, key="strategies")
-    n = st.slider("N, for top N", 1, 50, 10, key="n")
+    n = st.slider("N, for top N and worst N", 1, 50, 10, key="n")
     start, end = st.select_slider("Years", options=list(range(FIRST_YEAR, LAST_YEAR + 1)),
                                   value=(FIRST_YEAR, LAST_YEAR), key="years")
     cost = st.slider("Trading cost (basis points per side)", 0, 100, 10, key="cost",
@@ -84,7 +86,7 @@ with st.sidebar:
                          "which sit in cash for long stretches.")
     mode = st.radio("Universe, for stock-picking strategies", [PIT, NAIVE], key="universe")
     st.caption("Every strategy decides at a close and trades at the next day's close. Last year's #1 / top N: "
-               "ranked on the last trading day of each year. Momentum: the top 10% by return from 12 months "
+               "ranked on the last trading day of each year. Last year's worst N: the mirror image, a bet that big losers bounce back. Momentum: the top 10% by return from 12 months "
                "ago to 1 month ago, re-ranked every month-end. Low volatility: the 50 members with the "
                "calmest daily prices over the past year, re-ranked every quarter. SPY timing rules: decided "
                "every day. SPY buy-and-hold is always shown.")
@@ -97,7 +99,9 @@ def compute(chosen: tuple, n: int, start: int, end: int, cost: int, mode: str, c
     detail = pit_detail if mode == PIT else naive_detail
     monthly = monthly_detail["pit" if mode == PIT else "naive"]
     universe = rankable_universe(detail, formation_dates(cal, window.years))
+    with_crashes = rankable_universe(detail, formation_dates(cal, window.years), real_crashes=real_crashes)
     by_month = rankable_by_date(monthly)
+    worst_case = None
     runs = {SPY: run_strategy(SPY, spy_buy_and_hold(prices, universe, window.rebalance), prices, cost, cal, window, rate)}
     for name in chosen:
         if name in TIMING:
@@ -106,6 +110,12 @@ def compute(chosen: tuple, n: int, start: int, end: int, cost: int, mode: str, c
             w, label = momentum(prices, by_month, monthly_decisions(cal, window)), name
         elif name == LOWVOL:
             w, label = low_volatility(prices, by_month, monthly_decisions(cal, window, every=3), n=50), name
+        elif name == BOTTOMN:
+            w, label = bottom_n(prices, with_crashes, window.rebalance, n=n), f"Last year's worst {n}"
+            # Lower bound: every holding whose data ended counted as worthless (bankruptcies).
+            low = run_strategy(label, w, prices, cost, cal, window, rate, ended_recovery=0.0)
+            exits = low.trades.note.str.contains("counted as worth", na=False).sum()
+            worst_case = (label, summary(low, low)["CAGR %"], int(exits))
         elif name == TOP1:
             w, label = top_n(prices, universe, window.rebalance, n=1), TOP1
         else:
@@ -114,10 +124,10 @@ def compute(chosen: tuple, n: int, start: int, end: int, cost: int, mode: str, c
     named = pd.concat([monthly[["code", "ticker"]], detail[["code", "ticker"]]]).dropna(subset=["code"])
     labels = named.drop_duplicates("code", keep="last").set_index("code")["ticker"].to_dict()
     coverage = ({r.year: (r.band, r.coverage_pct) for r in cov_summary.itertuples()} if mode == PIT else None)
-    return runs, labels, coverage
+    return runs, labels, coverage, worst_case
 
 
-runs, labels, coverage = compute(tuple(chosen), n, start, end, cost, mode, cash)
+runs, labels, coverage, worst_case = compute(tuple(chosen), n, start, end, cost, mode, cash)
 theme = 1 if getattr(st.context.theme, "type", None) == "dark" else 0
 spy = runs[SPY]
 strategies = [(k, r) for k, r in runs.items() if k != SPY]
@@ -163,6 +173,13 @@ st.caption("**Return/yr**: compound annual growth rate. **Sharpe**: return per u
            "**Beat SPY**: share of years with a higher return. **Trades/yr**: purchases and sales, including the small "
            "top-ups and trims that keep a monthly portfolio equally weighted. **Invested**: average share of money "
            "in stocks rather than cash.")
+if worst_case and worst_case[2]:
+    label, low_cagr, exits = worst_case
+    normal = next(r["CAGR %"] for r in rows if r["Strategy"] == label)
+    st.caption(f"**Floor for {label.lower()}:** if all {exits} holdings whose data ended had been worthless, it would "
+               f"return {low_cagr:.1f}% a year instead of {normal:.1f}%. That floor is far too pessimistic: most of those "
+               "companies were bought out, which paid holders about the last price. The exceptions are bankruptcies "
+               "and failures such as SVB's (docs/worst10-review.md).")
 
 
 # --- Charts: one small chart per strategy, each against SPY --------------------------
@@ -209,7 +226,9 @@ if strategies:
                "volatility, holdings show the average number of stocks held, turnover (the share of the "
                "portfolio sold during the year: 100% = all of it replaced once) and the three holdings that moved "
                "the year's return most, in percentage points. † = the stock's data ended during the year: it was "
-               "sold at its last price, and the real outcome (often a takeover or bankruptcy) is unknown.")
+               "sold at its last price, and the real outcome (often a takeover or bankruptcy) is unknown. "
+               "(not bought) = no price on the purchase day, e.g. a company taken over on the formation date; "
+               "its share stayed in cash.")
     pct = st.column_config.NumberColumn(format="%.1f%%")
     tabs = st.tabs([r.name for _, r in strategies])
     for tab, (key, run) in zip(tabs, strategies):

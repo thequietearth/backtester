@@ -23,7 +23,7 @@ Reproduce: `python scripts/run_v1.py`, then `python scripts/review_top10.py` (wr
 
 | Pick | Problem | Fix |
 |---|---|---|
-| Williams (WMB), 2005 #5 | EODHD's dividend adjustments in 2003–05 are far too large: +105% adjusted against +66% traded (Yahoo also +66%). The real dividend was about $0.01 a quarter | Prices for 2003–05 excluded (`data/price_exclusions.csv`) |
+| Williams (WMB), 2005 #5 | EODHD's dividend adjustments in 2003–05 are far too large: +105% adjusted against +66% traded (Yahoo also +66%). The real dividend was about $0.01 a quarter | Prices from July 2002 to 2005 excluded (`data/price_exclusions.csv`; the start moved from 2003 in M5c, when the bad adjustments were traced back to bogus $0.56 dividends from 30 July 2002) |
 | L Brands (LB), 2005 #4 | `LB_old2` before 2007 is a different, thinly traded instrument, giving +133% where the real figure was about +28% | Remapped: `LTD` for Sep 2003–Nov 2013 (checked against Yahoo's BBWI), `LB_old2` afterwards (matches Yahoo exactly), missing before Sep 2003 |
 | Coastal (CGP), 2001 #7 | Coastal was bought by El Paso on 29 Jan 2001, but EODHD's `CGP` prices restart later as another instrument, running to 2022. The engine "held" the impostor | Prices after 29 Jan 2001 excluded. The engine also changed (below) |
 | Hercules (HPC), 2007 | Bought by Ashland on 13 Nov 2008. After that the price is frozen at $30.02 with no volume, then becomes another instrument | Prices after the takeover excluded |

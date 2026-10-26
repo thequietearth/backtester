@@ -4,7 +4,7 @@
 code,start,end,note
 CGP,2001-01-30,,Coastal Corp was bought by El Paso on 2001-01-29; later prices under CGP are a different instrument (they run to 2022)
 HPC,2008-11-14,,Hercules was bought by Ashland on 2008-11-13; afterwards the price is frozen at $30.02 with no volume and later becomes another instrument
-WMB,2003-01-01,2005-12-31,"Williams: EODHD's dividend adjustments are far too large (adjusted +105% vs traded and Yahoo +66% in 2004); dividends were about $0.01 a quarter"
+WMB,2002-07-30,2005-12-31,"Williams: EODHD's dividend adjustments are far too large (adjusted +105% vs traded and Yahoo +66% in 2004); dividends were about $0.01 a quarter. It records $0.56 dividends on 2002-07-30, 2002-10-30 and 2003-01-29 (adjustments of +33%, +45%, +18%), so the exclusion starts there (moved from 2003 in M5c)"
 JCI,2016-09-01,2016-12-31,"Johnson Controls: 2016 merger with Tyco and Adient spin-off; EODHD's adjusted return (+64%) disagrees with its traded price (+38%) and Yahoo (+42%), so 2016 can't be trusted"
 MYL,2020-11-17,,"Mylan became Viatris on 2020-11-16; the last two prices under MYL are $0.079 (traded and adjusted), a fake -99.5% for anyone holding it"
 DWDP,2019-06-28,,"DowDuPont became DuPont (DD) on 2019-06-03; the code then carried DD's prices, but its last print is $30.52 the day after $74.11 while DD traded at $75: not a real price"
@@ -12,3 +12,7 @@ STJ,2002-07-01,2002-07-19,"St. Jude Medical: EODHD's traded prices already inclu
 X,2005-05-13,2005-06-01,"US Steel: EODHD records a 2-for-1 split on 2005-05-13 that never happened (the traded price fell 3%): a fake +94% in the adjusted price. Three weeks blanked, so a holder exits at the last correct price (flagged) instead"
 GDW,2003-03-05,,"Golden West Financial: from 2003-03-05 EODHD's GDW is a different instrument (traded $71 -> $2.20, then penny-stock prices), while Golden West traded around $70-100 until Wachovia bought it in 2006"
 RIG,2007-11-27,2007-12-14,"Transocean: on the GlobalSantaFe merger day EODHD's adjusted price jumps +30%, but holders got 0.6996 new shares plus $33.03 cash per share, worth less than the old share. Three weeks blanked, so a holder exits at the last pre-merger price (flagged) instead"
+FDC_old,2006-10-02,2006-10-20,"First Data: the Western Union spin-off (2006-09-29) is missing from EODHD's adjusted prices, a fake -44% day. Three weeks blanked: it isn't ranked on the fake loss, and a holder exits at the pre-spin-off price"
+CVC,2011-07-01,2011-07-21,"Cablevision: the AMC Networks spin-off (2011-06-30) is missing from EODHD's adjusted prices, a fake -28% day. Three weeks blanked, as for First Data"
+ACAS,2009-06-18,2009-07-08,"American Capital: EODHD records a $1.07 dividend on 2009-06-18, a third of the $3.27 share price, and adjusts +36% for it; the company paid no dividends in 2009 (suspended in its 2008-09 debt crisis). Three weeks blanked, so a holder exits at the last correct price (flagged)"
+TWX,2003-10-16,2003-11-05,"Time Warner: EODHD's prices before 2003-10-16 are on a different split basis (x3, as if adjusted for the 2009 1-for-3 reverse split) than after: a fake -66% day. Three weeks blanked, so a holder exits at the last price before it (flagged)"
