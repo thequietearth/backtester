@@ -101,6 +101,7 @@ def test_robustness_page_shows_every_variant_and_a_verdict():
     at.switch_page("pages/2_Robustness.py").run()
     assert not at.exception
     assert any(h.value.startswith("Verdict: ") for h in at.subheader)
+    assert any(h.value.startswith("Added after the fact: against owning every member equally") for h in at.subheader)
     table = at.dataframe[0].value
     assert len(table) == 36 and table.Variant.str.endswith("(published)").sum() == 1
 

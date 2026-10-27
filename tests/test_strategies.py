@@ -10,7 +10,7 @@ import pytest
 
 from bt.coverage import RANKABLE, coverage_by_year, load_crash_review, rankable_universe
 from bt.engine import run_backtest
-from bt.strategies import (bottom_n, low_volatility, momentum, momentum_scores, rsi, rsi2_positions, spy_buy_and_hold,
+from bt.strategies import (bottom_n, equal_weight_all, low_volatility, momentum, momentum_scores, rsi, rsi2_positions, spy_buy_and_hold,
                            spy_golden_cross, spy_rsi2, spy_trend, top_n, volatility_scores)
 from bt.universe import members_on, month_end, month_ends, naive_constituents, naive_security_map
 
@@ -60,6 +60,11 @@ def test_top_n_decisions_ignore_prices_after_the_decision_date():
     changed = PRICES.copy()
     changed.loc[changed.index > F_DATE] *= np.random.default_rng(0).uniform(0.1, 10, size=(len(changed.loc[changed.index > F_DATE]), changed.shape[1]))
     pd.testing.assert_frame_equal(top_n(PRICES, UNIVERSE, [F_DATE], n=2), top_n(changed, UNIVERSE, [F_DATE], n=2))
+
+
+def test_equal_weight_all_holds_every_member_equally():
+    w = equal_weight_all(PRICES, UNIVERSE, [F_DATE])
+    assert w.loc[F_DATE][w.loc[F_DATE] > 0].to_dict() == {"A": 0.25, "B": 0.25, "C": 0.25, "D": 0.25}
 
 
 def test_spy_buy_and_hold_is_a_single_purchase_at_the_first_date():

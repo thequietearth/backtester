@@ -21,7 +21,7 @@ Chasing winners beat the index by about a point a year, but with far bigger cras
 - **Do the research versions of stock-picking do better?** **Momentum** (the top 10% by return over the last year, skipping the latest month, re-ranked monthly) earned 9.3% a year, about what last year's top 10 did, with a worst fall of −61% instead of −83%. **Low volatility** (the 50 calmest members) earned 8.8% a year with a worst fall of −36%, and the best risk-adjusted return of the stock-pickers.
 - **Does buying last year's *losers* work instead?** No. The mirror image of v1 returned 5.1% a year against SPY's 8.4%, despite rebound years of +135% (2003) and +78% (2009). Done naively, on today's members, it appears to return 28% a year: survivorship bias at its largest.
 
-**Finally, is momentum real?** A [robustness check](docs/robustness.md) re-ran it with 36 different settings. 31 beat SPY over 1999–2025, so the idea isn't a fluke of one setting. But every one of them made its lead in 1999–2009, all but one trailed SPY since 2010, and none beats SPY by more than luck could explain.
+**Finally, is momentum real?** A [robustness check](docs/robustness.md) re-ran it with 36 different settings. 31 beat SPY over 1999–2025, but none by more than luck could explain. A check added afterwards found the reason: **simply owning every S&P 500 member in equal amounts, with no picking at all, returned 9.9% a year, more than every stock-picking strategy tested.** Their leads over SPY were mostly the equal-weight effect: smaller companies beat the giants in the 2000s, and the giants led after 2010.
 
 **[Read the results →](docs/results.md)**
 
@@ -48,7 +48,7 @@ A Robustness page shows all 36 momentum variants side by side, and a coverage re
 - **[Sanity check](docs/sanity-check.md):** built with the same data and engine, an equal-weight S&P 500 tracks RSP, the real equal-weight ETF, within about 0.4 points a year, and a low-volatility replica tracks SPLV within about 0.2. An audit of every day a strategy held a stock caught the price errors the automatic checks miss.
 - **[Top-10 pick review](docs/top10-review.md):** all 270 picks for 1999–2025, checked against Yahoo or by hand.
 - **[Worst-10 pick review](docs/worst10-review.md):** all 270 contrarian picks, plus hand verdicts on 26 crashes the price checks had set aside, because real crashes and broken data look alike.
-- **Tests:** 141 tests, including hand-worked engine, metric, strategy and mapping cases and a no-lookahead proof for every strategy. Run `pytest`.
+- **Tests:** 142 tests, including hand-worked engine, metric, strategy and mapping cases and a no-lookahead proof for every strategy. Run `pytest`.
 
 ## Setup
 
@@ -75,7 +75,7 @@ Other scripts:
 - `scripts/run_v1.py` and `scripts/review_top10.py` print the full v1 results and the pick review; `scripts/review_worst10.py` reviews the contrarian picks.
 - `scripts/make_figures.py` redraws the charts and prints the numbers in the results.
 - `scripts/sanity_rsp.py`, `scripts/sanity_factor_etfs.py` and `scripts/audit_holdings.py` (`--variants` adds the 36 momentum variants) run the sanity checks.
-- `scripts/robustness.py` runs the 36 momentum variants for the Robustness page (several minutes).
+- `scripts/robustness.py` runs the 36 momentum variants for the Robustness page (several minutes); `scripts/verify_robustness.py` checks that run independently.
 - `scripts/screenshots.py` retakes the screenshots. It needs `pip install -r requirements-dev.txt` and `python -m playwright install chromium`.
 
 Included in the repo:

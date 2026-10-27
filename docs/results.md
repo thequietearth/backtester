@@ -9,7 +9,7 @@
 - **Do the research versions of stock-picking do better?** Momentum, re-ranked monthly, earned about what last year's top 10 did, with much smaller crashes. Low volatility matched the market with a worst fall of −36% ([details](#v2-momentum-and-low-volatility)).
 - **Does buying last year's *losers* work instead?** Not overall: 5.1% a year against SPY's 8.4%, despite rebound years of +135% and +78% ([details](#v2-last-years-losers-contrarian)).
 
-**Finally, is momentum real?** 31 of 36 variations of the momentum rule beat SPY over 1999–2025. But all of that lead came from 1999–2009, and none passes a test for luck ([robustness check](robustness.md)).
+**Finally, is momentum real?** 31 of 36 variations of the momentum rule beat SPY over 1999–2025, but none passes a test for luck. And a check added afterwards found the reason: **simply owning every member in equal amounts returned 9.9% a year, more than any stock-picking strategy tested** ([robustness check](robustness.md), [below](#the-baseline-that-beat-them-all-owning-every-member-equally)).
 
 ## The numbers (1999–2025, 10 bps per trade, dividends reinvested)
 
@@ -105,6 +105,23 @@ The mirror image of v1: each January, buy the 10 S&P 500 members that fell most 
 - **Costs matter less than for momentum,** because it trades once a year: 5.3% a year with no costs, 4.3% at 50 bps.
 - **What the data can't show.** Ten picks' data ended while held. Eight were takeovers, which paid about the last price. SVB's 2023 failure is booked at its last price, though shareholders lost nearly everything: 2023 looks about 4 points too good (about 0.15 points a year overall). Counting every such stock as worthless gives a floor of 0.3% a year, which is far too pessimistic. And Williams can't be ranked for 2003 because its prices are broken: it was one of 2002's worst stocks and rose 251% in 2003, so the 2003 result misses a big winner.
 - **Checking it was most of the work.** The price checks set aside real crashes along with broken data, so 26 cases were judged by hand (11 real crashes, 15 broken series), and all 270 picks were checked, 145 against Yahoo and 125 by hand ([review](worst10-review.md)).
+
+## The baseline that beat them all: owning every member equally
+Every stock-picking strategy here holds its stocks in equal amounts, while SPY weights companies by size. The fair baseline is therefore to own **every** member of the time in equal amounts, rebalanced monthly, with no picking at all. It was added after verifying the robustness check (M6).
+
+| Strategy | $10,000 becomes | Return per year | Worst fall | Sharpe |
+|---|---|---|---|---|
+| **Every member, equal weight** (no picking) | **$126,400** | **9.9%** | −60% | **0.47** |
+| Last year's #1 | $115,600 | 9.5% | −98% | 0.41 |
+| Last year's top 10 | $110,400 | 9.3% | −83% | 0.38 |
+| Momentum | $110,200 | 9.3% | −61% | 0.41 |
+| Low volatility | $96,600 | 8.8% | −36% | 0.52 |
+| SPY | $89,000 | 8.4% | −55% | 0.42 |
+| Last year's worst 10 | $38,300 | 5.1% | −82% | 0.27 |
+
+- **No stock-picking rule beat simply owning everything equally.** Their leads over SPY were mostly the equal-weight effect: owning every member equally beat SPY by 5.3 points a year in 1999–2009, when smaller companies beat the giants, and trailed it by 1.5 points a year after 2010, when the giants led.
+- **Low volatility is the one with a better ride:** a lower return than equal weight (8.8% against 9.9%), but a much smaller worst fall (−36% against −60%) and the best Sharpe ratio.
+- Equal weight isn't one of the app's strategies yet; it is parked in PLAN.md's "Later" list.
 
 ## How much to trust this
 - **The ranking misses some stocks in early years.** For 1999–2009, 86–95% of each year's members had usable price data; from 2010 it's 97–100% (see the coverage report). A stock missing from the data could have been the real #1. To guard against that, **all 270 top-10 picks were checked**, against Yahoo or by hand ([review](top10-review.md)).

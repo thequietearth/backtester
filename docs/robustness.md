@@ -7,7 +7,9 @@
 
 The criteria fixed before running call that "mixed", because it fails the condition that a majority beat SPY in each era.
 
-Reproduce: `python scripts/robustness.py` (several minutes), then open the app's Robustness page or run `python scripts/make_figures.py` for the figure.
+**A check added afterwards explains the result.** Simply owning every member in equal amounts, with no picking at all, returned **9.9% a year**: more than the typical variant (9.7%). It shows the same pattern, ahead of SPY in 1999–2009 and behind it since. Against that baseline, only **14 of 36** variants come out ahead, typically 0.2 points a year behind. **Momentum's lead over SPY is the equal-weight effect, not momentum.**
+
+Reproduce: `python scripts/robustness.py` (several minutes), then open the app's Robustness page or run `python scripts/make_figures.py` for the figure. `python scripts/verify_robustness.py` reruns the independent checks below.
 
 ## Why this check
 The momentum rule in the results (the top 10% of members by return from 12 months ago to 1 month ago, re-ranked monthly) beat SPY by about a point a year. But that rule involves several fairly arbitrary choices. If the lead only appeared with exactly those choices, it would probably be a fluke of history: "curve fitting". If most reasonable variants show a similar lead, the idea is more likely real.
@@ -55,6 +57,29 @@ That gives 3 × 3 × 2 × 2 = 36 variants. Everything else is held fixed: member
 - **Costs matter.** Monthly variants replace about four times their holdings a year (median turnover 421%) and break even at about 22 bps per trade; quarterly ones (229%) at about 38 bps. Trading large US stocks costs a few bps today, but the bid-ask spread alone was often 20 bps or more before 2001.
 - **The ride is rougher, not smoother.** Typical Sharpe ratios are a little above SPY's (0.44 against 0.42), but 30 of 36 variants had a deeper worst fall than SPY.
 
+## Added after the fact: against owning every member equally
+A verification run (below) suggested a fairer baseline than SPY. Every variant holds its stocks in equal amounts, while SPY weights companies by size, so part of any lead over SPY can come from equal weighting alone. This comparison wasn't in the plan: it doesn't change the verdict above, which was set in advance, but it changes what the verdict means.
+
+| | Return per year | vs SPY, 1999–2009 | vs SPY, 2010–2025 | Sharpe | Worst fall |
+|---|---|---|---|---|---|
+| **Every member, equal weight** (no picking, rebalanced monthly) | **9.9%** | **+5.3 pts** | **−1.5 pts** | **0.47** | −60% |
+| Momentum, typical variant | 9.7% | +5.0 pts | −1.8 pts | 0.44 | −60% |
+| Momentum, published rule | 9.3% | +4.5 pts | −1.8 pts | 0.41 | −61% |
+| SPY | 8.4% | — | — | 0.42 | −55% |
+
+- **Momentum has no edge over equal weight.** Only 14 of 36 variants beat it over 1999–2025 (typically 0.2 points a year behind; the published rule 0.6 behind), and 15 of 36 in each era.
+- **The era pattern is equal weight's, not momentum's.** In 1999–2009 smaller companies beat the giants, so any equal-weight portfolio of S&P 500 members beat SPY. After 2010 the giants led, and every equal-weight portfolio trailed. The 36 variants simply rode that wave.
+- **Random picks agree.** Portfolios of 48 members picked at random each month returned 8.2–12.2% a year before costs (typically 9.6%, close to equal weight's 10.0%). The typical momentum variant returned 10.5% before costs, but its higher trading uses up most of that difference. Only 2 of 36 variants beat every random portfolio.
+
+## How the run was checked
+`scripts/verify_robustness.py` checks the run independently:
+- **Returns without the engine:** buy and hold between trades, no costs. 298 of 324 monthly periods of the published rule match the engine exactly. The other 26 are months where a held stock had already stopped trading by the rebalance day, almost always a takeover that had just closed. The engine can't sell it and holds it until its "data ended" exit (−0.08 points a year, the realistic direction).
+- In two other variants, a few periods also differ because the engine sold a holding after more than 10 days without a price, while the simple calculation followed the price when it came back. The cases are Gateway and Transocean after their excluded fake days, and May Department Stores, whose code comes back as junk after its 2005 takeover. In each case the engine's result is the right one.
+- **Rankings recomputed from the price table:** the stocks held match exactly on all sample dates.
+- **Structure:** holding counts stay within 5, 10 or 20% of the universe; quarterly variants only trade in January, April, July and October; reruns are identical.
+- **Stored results:** every lead, era lead, t-statistic and break-even cost matches a fresh calculation.
+- **No hidden bias:** random portfolios land near the equal-weight baseline, as they should. A pipeline with survivorship bias or lookahead would make random picks look too good.
+
 ## Data fixes found on the way
 Running 36 variants means holding many more stocks at many more moments. The holdings audit (`scripts/audit_holdings.py --variants`) now covers all of them, and it found broken data that none of the published strategies had held on the bad days:
 - **R.R. Donnelley** sits at about $0.02 a share until December 2001, then jumps 44,281% in a day (the company really traded around $30). Before the fix, one variant (top 20%, 12-0 months, monthly) held it across the jump and showed a fake +469% year: 16.7% a year instead of 9.2%.
@@ -67,4 +92,6 @@ All are excluded by date in `data/price_exclusions.csv`, never edited. Two publi
 - **low volatility:** 8.7% → 8.8% a year, because it had held R.R. Donnelley's junk prices for two quarters.
 
 ## What this means
-Momentum among S&P 500 stocks isn't an artefact of one lucky setting: nearly every reasonable version beat the index over 27 years. But that lead came from 1999–2009. Since 2010, almost every version has trailed a simple index fund, and over the whole period none beats SPY by more than luck could explain. A sensible conclusion: momentum is a real tendency that has paid off in some eras and not others, and holding SPY would have done about as well with far less work, trading and tax.
+Nearly every reasonable version of momentum beat SPY over 27 years, and the result doesn't hang on one lucky setting. But the reason isn't momentum. Simply owning every S&P 500 member in equal amounts did at least as well, with the same good decade and the same bad one. Over the whole period, no variant beats SPY by more than luck could explain, and as a group they don't beat equal weight at all.
+
+Among large US stocks in 1999–2025, then, picking last year's winners each month added nothing beyond holding everything in equal amounts. Holding an index fund would have done about as well, with far less work, trading and tax.

@@ -8,6 +8,11 @@ any results were seen (bt/robustness.py, PLAN.md M6).
 Every variant: point-in-time members, equal weight, cash at the T-bill rate, 1999-2025,
 ranked from the same month-end universe (members with 12 clean months of prices). Each is
 run at 10 bps per side (the headline), and at 0 and 30 bps to find its break-even cost.
+
+Added after the first results (labelled as such everywhere): each variant is also compared
+with owning every member of that universe in equal amounts, rebalanced monthly. Every
+variant holds equal amounts, so beating SPY (weighted by company size) can come from equal
+weighting alone; this baseline separates the two.
 """
 import sys
 import time
@@ -21,7 +26,7 @@ from bt.coverage import rankable_by_date  # noqa: E402
 from bt.data import load_tbill  # noqa: E402
 from bt.report import backtest_window, monthly_decisions, run_strategy, summary, turnover  # noqa: E402
 from bt.robustness import DEFAULT, ERAS, break_even_cost, era_lead, lead_stats, variant_grid, verdict  # noqa: E402
-from bt.strategies import momentum, spy_buy_and_hold  # noqa: E402
+from bt.strategies import equal_weight_all, momentum, spy_buy_and_hold  # noqa: E402
 
 CACHE = ROOT / "data" / "cache"
 COSTS = (0, 10, 30)
@@ -41,6 +46,9 @@ def main():
     w = backtest_window(cal, 1999, 2025)
     spy = run_strategy("SPY", spy_buy_and_hold(prices, {}, w.rebalance), prices, 10, cal, w, tbill)
     spy_sum = summary(spy, spy)
+    ew = run_strategy("Every member, equal weight", equal_weight_all(prices, universe, monthly_decisions(cal, w)),
+                      prices, 10, cal, w, tbill)
+    ew_sum = summary(ew, spy)
     rows, started = [], time.time()
     grid = variant_grid()
     for i, v in enumerate(grid.itertuples(index=False), 1):
@@ -61,7 +69,11 @@ def main():
                      **lead_stats(main_run.yearly, spy.yearly),
                      "cagr_0bps": cagrs[0], "cagr_30bps": cagrs[2],
                      "break_even_bps": break_even_cost(COSTS, cagrs, spy_sum["CAGR %"]),
-                     "spy_cagr": spy_sum["CAGR %"], "spy_sharpe": spy_sum["Sharpe"]})
+                     "spy_cagr": spy_sum["CAGR %"], "spy_sharpe": spy_sum["Sharpe"],
+                     "lead_vs_ew": s["CAGR %"] - ew_sum["CAGR %"],
+                     **{f"vs_ew_{a}_{z}": 100 * era_lead(main_run.yearly, ew.yearly, a, z) for a, z in ERAS},
+                     "ew_cagr": ew_sum["CAGR %"], "ew_sharpe": ew_sum["Sharpe"], "ew_worst_fall": ew_sum["Max drawdown %"],
+                     **{f"ew_lead_{a}_{z}": 100 * era_lead(ew.yearly, spy.yearly, a, z) for a, z in ERAS}})
         print(f"{i:2}/{len(grid)} {label(v):40} {s['CAGR %']:5.2f}% a year, lead {rows[-1]['lead']:+.2f} pts "
               f"({time.time() - started:.0f}s)", flush=True)
     out = pd.DataFrame(rows)
@@ -76,6 +88,12 @@ def main():
           f"median break-even cost {out.break_even_bps.median():.0f} bps; "
           f"variants with t >= 2: {(out.t_stat >= 2).sum()} of {len(out)}")
     print(f"verdict: {verdict(beat, beat1, beat2)}")
+    print(f"\nadded after the fact - every member, equal weight: {ew_sum['CAGR %']:.2f}% a year, Sharpe "
+          f"{ew_sum['Sharpe']:.2f}; vs SPY {out[f'ew_lead_{a1}_{z1}'].iloc[0]:+.1f} pts in {a1}-{z1}, "
+          f"{out[f'ew_lead_{a2}_{z2}'].iloc[0]:+.1f} in {a2}-{z2}")
+    print(f"variants beating it: {(out.lead_vs_ew > 0).sum()} of {len(out)} over 1999-2025 (median "
+          f"{out.lead_vs_ew.median():+.2f} pts), {(out[f'vs_ew_{a1}_{z1}'] > 0).sum()} in {a1}-{z1}, "
+          f"{(out[f'vs_ew_{a2}_{z2}'] > 0).sum()} in {a2}-{z2}")
 
 
 if __name__ == "__main__":

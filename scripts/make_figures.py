@@ -26,8 +26,8 @@ from bt.metrics import drawdown_series  # noqa: E402
 from bt.robustness import ERAS  # noqa: E402
 from bt.report import (backtest_window, contributions, daily_decisions, monthly_decisions, run_strategy,  # noqa: E402
                        summary, turnover)
-from bt.strategies import (bottom_n, low_volatility, momentum, spy_buy_and_hold, spy_golden_cross,  # noqa: E402
-                           spy_rsi2, spy_trend, top_n)
+from bt.strategies import (bottom_n, equal_weight_all, low_volatility, momentum, spy_buy_and_hold,  # noqa: E402
+                           spy_golden_cross, spy_rsi2, spy_trend, top_n)
 from bt.universe import formation_dates  # noqa: E402
 
 CACHE = ROOT / "data" / "cache"
@@ -244,6 +244,16 @@ def main():
         r = run_strategy(f"worst {n}", bottom_n(prices, losers, w.rebalance, n=n), prices, 10, cal, w, tbill)
         print(f"  worst {n}: CAGR {summary(r, spy)['CAGR %']:.2f}%, worst fall {summary(r, spy)['Max drawdown %']:.0f}%")
 
+    # Added in M6: owning every member equally, the fair baseline for the equal-weight pickers.
+    months_all = monthly_decisions(cal, w)
+    pit_universe = rankable_by_date(pd.read_parquet(CACHE / "universe_monthly_pit.parquet"))
+    ew = run_strategy("Every member, equal weight", equal_weight_all(prices, pit_universe, months_all),
+                      prices, 10, cal, w, tbill)
+    s = summary(ew, spy)
+    print(f"\nevery member, equal weight: ${s['$10k becomes']:,.0f}, {s['CAGR %']:.2f}% a year, volatility "
+          f"{s['Volatility %']:.0f}%, worst fall {s['Max drawdown %']:.0f}%, Sharpe {s['Sharpe']:.2f}, beat SPY "
+          f"{s['Years beating SPY %']:.0f}% of years")
+
     robustness_figure()
 
 
@@ -265,6 +275,11 @@ def robustness_figure():
     left.scatter([d.lead[k]], [k], s=180, facecolors="none", edgecolors=BLUE, linewidths=1.6, zorder=3)
     left.annotate("the published rule", (d.lead[k], k), xytext=(10, 0), textcoords="offset points",
                   va="center", fontsize=9, color=INK)
+    if "ew_cagr" in r:  # added after the first results: owning every member equally
+        ew_lead = r.ew_cagr.iloc[0] - r.spy_cagr.iloc[0]
+        left.axvline(ew_lead, color=MUTED, linestyle="--", linewidth=1.2)
+        left.annotate("every member,\nequal weight", (ew_lead, len(d) - 1), xytext=(4, 6), textcoords="offset points",
+                      fontsize=8.5, color=INK, va="bottom")
     left.set_yticks(range(len(d)), d.label, fontsize=7.5)
     left.xaxis.set_major_formatter(mticker.FuncFormatter(lambda v, _: f"{v:+.0f}"))
     style(left, "")
@@ -277,6 +292,11 @@ def robustness_figure():
     right.scatter(dr[e1], dr[e2], s=180, facecolors="none", edgecolors=BLUE, linewidths=1.6, zorder=3)
     right.annotate("the published rule", (dr[e1].iloc[0], dr[e2].iloc[0]), xytext=(10, 0), textcoords="offset points",
                    va="center", fontsize=9, color=INK)
+    if "ew_cagr" in r:
+        ex, ey = r[f"ew_lead_{a1}_{z1}"].iloc[0], r[f"ew_lead_{a2}_{z2}"].iloc[0]
+        right.scatter([ex], [ey], s=80, marker="D", color=MUTED, zorder=4)
+        right.annotate("every member, equal weight", (ex, ey), xytext=(-10, -14), textcoords="offset points",
+                       ha="right", fontsize=8.5, color=INK)
     for ax in (right.xaxis, right.yaxis):
         ax.set_major_formatter(mticker.FuncFormatter(lambda v, _: f"{v:+.0f}"))
     style(right, "")

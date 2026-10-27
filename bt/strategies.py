@@ -62,6 +62,17 @@ def bottom_n(prices: pd.DataFrame, universe: dict, rebalance_dates, n: int = 10)
     return _weights(rows, rebalance_dates)
 
 
+def equal_weight_all(prices: pd.DataFrame, universe: dict, rebalance_dates) -> pd.DataFrame:
+    """Every member that may be ranked, in equal amounts: no picking at all.
+
+    The fair baseline for the stock-picking strategies, which all hold equal amounts. SPY
+    weights companies by size, so beating it can come from equal weighting alone: smaller
+    companies beat the giants in 1999-2009, and the giants led after 2010 (M6).
+    """
+    rows = {d: {c: 1 / len(universe.get(d, [])) for c in universe.get(d, [])} for d in rebalance_dates}
+    return _weights(rows, rebalance_dates)
+
+
 # --- Monthly and quarterly stock-picking ---------------------------------------------------
 # Both decide at month-ends, among the members that pass the coverage report's checks over
 # the 12 months ending on the decision date (bt.coverage.decision_universe).
